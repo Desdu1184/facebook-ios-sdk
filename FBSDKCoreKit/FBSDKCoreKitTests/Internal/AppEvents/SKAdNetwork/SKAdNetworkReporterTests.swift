@@ -28,7 +28,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   ]
   // swiftlint:disable:next force_unwrapping
   lazy var defaultConfiguration = SKAdNetworkConversionConfiguration(json: json)!
-  lazy var skAdNetworkReporter = SKAdNetworkReporter(
+  lazy var skAdNetworkReporter = _SKAdNetworkReporter(
     graphRequestFactory: graphRequestFactory,
     dataStore: userDefaultsSpy,
     conversionValueUpdater: TestConversionValueUpdating.self
@@ -54,7 +54,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
     }
   }
 
-  func testLoadReportData() {
+  func testLoadReportData() throws {
     let set = Set(["fb_mobile_puchase"])
     let recordedEvents = NSMutableSet(set: set)
     let recordedValues: NSMutableDictionary = ["fb_mobile_purchase": ["USD": 10]]
@@ -62,7 +62,12 @@ final class SKAdNetworkReporterTests: XCTestCase {
     let conversionValue = 10
     let timestamp = Date()
 
-    saveEvents(events: recordedEvents, values: recordedValues, conversionValue: conversionValue, timestamp: timestamp)
+    try saveEvents(
+      events: recordedEvents,
+      values: recordedValues,
+      conversionValue: conversionValue,
+      timestamp: timestamp
+    )
 
     skAdNetworkReporter._loadReportData()
     XCTAssertEqual(
@@ -92,7 +97,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
     skAdNetworkReporter.completionBlocks = []
     skAdNetworkReporter.configRefreshTimestamp = Date()
     userDefaultsSpy.set(
-      SampleSKAdNetworkConversionConfiguration.configJson,
+      SampleSKAdNetworkConversionConfiguration.fineCVconfigurationJson,
       forKey: "com.facebook.sdk:FBSDKSKAdNetworkConversionConfiguration"
     )
 
@@ -112,7 +117,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithoutValidCacheAndWithoutNetworkError() {
-    skAdNetworkReporter.config = nil
+    skAdNetworkReporter.configuration = nil
     skAdNetworkReporter.serialQueue = DispatchQueue(label: "test")
     skAdNetworkReporter.completionBlocks = NSMutableArray()
 
@@ -122,7 +127,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
     let request = graphRequestFactory.capturedRequests[0]
     request.capturedCompletionHandler?(
       nil,
-      SampleSKAdNetworkConversionConfiguration.configJson,
+      SampleSKAdNetworkConversionConfiguration.fineCVconfigurationJson,
       nil
     )
     XCTAssertEqual(count, 1, "Should expect the execution block to be called once")
@@ -131,13 +136,13 @@ final class SKAdNetworkReporterTests: XCTestCase {
       graphRequestFactory.capturedGraphPath?.contains(
         "ios_skadnetwork_conversion_config"
       ) == true,
-      "Should have graph request for config without valid cache"
+      "Should have graph request for configuration without valid cache"
     )
-    XCTAssertNotNil(skAdNetworkReporter.config, "Should have expected config")
+    XCTAssertNotNil(skAdNetworkReporter.configuration, "Should have expected configuration")
   }
 
   func testLoadConfigurationWithoutValidCacheAndWithNetworkError() {
-    skAdNetworkReporter.config = nil
+    skAdNetworkReporter.configuration = nil
     skAdNetworkReporter.serialQueue = DispatchQueue(label: name)
     skAdNetworkReporter.completionBlocks = NSMutableArray()
 
@@ -147,7 +152,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
     let request = graphRequestFactory.capturedRequests[0]
     request.capturedCompletionHandler?(
       nil,
-      SampleSKAdNetworkConversionConfiguration.configJson,
+      SampleSKAdNetworkConversionConfiguration.fineCVconfigurationJson,
       SampleError()
     )
     XCTAssertEqual(
@@ -164,11 +169,11 @@ final class SKAdNetworkReporterTests: XCTestCase {
       graphRequestFactory.capturedGraphPath?.contains(
         "ios_skadnetwork_conversion_config"
       ) == true,
-      "Should have graph request for config without valid cache"
+      "Should have graph request for configuration without valid cache"
     )
     XCTAssertNil(
-      skAdNetworkReporter.config,
-      "Should not have config with network error"
+      skAdNetworkReporter.configuration,
+      "Should not have configuration with network error"
     )
   }
 
@@ -180,7 +185,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   }
 
   func testShouldCutoffWithoutTimestampWithCutoffTime() {
-    skAdNetworkReporter.setConfiguration(defaultConfiguration)
+    skAdNetworkReporter.configuration = defaultConfiguration
     XCTAssertFalse(
       skAdNetworkReporter.shouldCutoff(),
       "Should not cut off reporting when there is no install timestamp"
@@ -207,7 +212,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   }
 
   func testShouldCutoffWhenTimestampEarlierThanCutoffTime() {
-    skAdNetworkReporter.setConfiguration(defaultConfiguration)
+    skAdNetworkReporter.configuration = defaultConfiguration
     userDefaultsSpy.set(
       Date.distantPast,
       forKey: "com.facebook.sdk:FBSDKSettingsInstallTimestamp"
@@ -220,7 +225,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   }
 
   func testShouldCutoffWhenTimestampLaterThanCutoffTime() {
-    skAdNetworkReporter.setConfiguration(defaultConfiguration)
+    skAdNetworkReporter.configuration = defaultConfiguration
     userDefaultsSpy.set(
       Date.distantFuture,
       forKey: "com.facebook.sdk:FBSDKSettingsInstallTimestamp"
@@ -233,7 +238,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   }
 
   func testShouldCutoff() {
-    skAdNetworkReporter.setConfiguration(defaultConfiguration)
+    skAdNetworkReporter.configuration = defaultConfiguration
     // Case 1: refresh install
     Settings.shared.recordInstall()
     XCTAssertFalse(skAdNetworkReporter.shouldCutoff())
@@ -255,7 +260,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
 
   func testCutoffWhenTimeBucketIsAvailable() {
     if #available(iOS 14.0, *) {
-      skAdNetworkReporter.setConfiguration(defaultConfiguration)
+      skAdNetworkReporter.configuration = defaultConfiguration
       let today = Date()
       let calendar = Calendar(identifier: .gregorian)
       var addComponents = DateComponents()
@@ -278,25 +283,23 @@ final class SKAdNetworkReporterTests: XCTestCase {
     }
   }
 
-  func testIsReportingEventWithConfig() {
-    skAdNetworkReporter.setConfiguration(
-      SKAdNetworkConversionConfiguration(
-        json: SampleSKAdNetworkConversionConfiguration.configJson
-      )! // swiftlint:disable:this force_unwrapping
-    )
+  func testIsReportingEventWithConfiguration() {
+    skAdNetworkReporter.configuration = SKAdNetworkConversionConfiguration(
+      json: SampleSKAdNetworkConversionConfiguration.fineCVconfigurationJson
+    )! // swiftlint:disable:this force_unwrapping
     XCTAssertTrue(
       skAdNetworkReporter.isReportingEvent("fb_test"),
-      "Should expect to be true for event in the config"
+      "Should expect to be true for event in the configuration"
     )
 
     XCTAssertFalse(
       skAdNetworkReporter.isReportingEvent("test"),
-      "Should expect to be false for event not in the config"
+      "Should expect to be false for event not in the configuration"
     )
   }
 
   func testUpdateConversionValue() {
-    skAdNetworkReporter.setConfiguration(defaultConfiguration)
+    skAdNetworkReporter.configuration = defaultConfiguration
     skAdNetworkReporter._updateConversionValue(2)
     XCTAssertTrue(
       TestConversionValueUpdating.wasUpdateVersionValueCalled,
@@ -306,8 +309,10 @@ final class SKAdNetworkReporterTests: XCTestCase {
 
   func testRecord() throws {
     if #available(iOS 14.0, *) {
-      let config = SKAdNetworkConversionConfiguration(json: SampleSKAdNetworkConversionConfiguration.configJson)
-      skAdNetworkReporter.setConfiguration(config!) // swiftlint:disable:this force_unwrapping
+      let configuration = SKAdNetworkConversionConfiguration(
+        json: SampleSKAdNetworkConversionConfiguration.fineCVconfigurationJson
+      )! // swiftlint:disable:this force_unwrapping
+      skAdNetworkReporter.configuration = configuration
       skAdNetworkReporter._recordAndUpdateEvent("fb_test", currency: nil, value: nil)
       skAdNetworkReporter._recordAndUpdateEvent("fb_mobile_purchase", currency: "USD", value: 100)
       skAdNetworkReporter._recordAndUpdateEvent("fb_mobile_purchase", currency: "USD", value: 201)
@@ -333,7 +338,7 @@ final class SKAdNetworkReporterTests: XCTestCase {
   func testInitializeWithDependencies() {
     let graphRequestFactory = GraphRequestFactory()
     let store = UserDefaultsSpy()
-    let reporter = SKAdNetworkReporter(
+    let reporter = _SKAdNetworkReporter(
       graphRequestFactory: graphRequestFactory,
       dataStore: store,
       conversionValueUpdater: TestConversionValueUpdating.self
@@ -360,13 +365,16 @@ final class SKAdNetworkReporterTests: XCTestCase {
     values: NSMutableDictionary,
     conversionValue: NSInteger,
     timestamp: Date
-  ) {
+  ) throws {
     let reportData: NSMutableDictionary = [:]
     reportData["conversion_value"] = conversionValue
     reportData["timestamp"] = timestamp
     reportData["recorded_events"] = events
     reportData["recorded_values"] = values
-    let cache = NSKeyedArchiver.archivedData(withRootObject: reportData)
+    let cache = try NSKeyedArchiver.archivedData(
+      withRootObject: reportData,
+      requiringSecureCoding: true
+    )
     userDefaultsSpy.set(cache, forKey: "com.facebook.sdk:FBSDKSKAdNetworkReporter")
   }
 }

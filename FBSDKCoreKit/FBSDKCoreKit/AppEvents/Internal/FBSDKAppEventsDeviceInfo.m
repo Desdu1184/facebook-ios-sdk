@@ -6,7 +6,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import "FBSDKAppEventsDeviceInfo.h"
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
+#import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #import <sys/sysctl.h>
 #import <sys/utsname.h>
@@ -19,42 +20,14 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
-
 #import "FBSDKDynamicFrameworkLoader.h"
 #import "FBSDKInternalUtility+Internal.h"
-#import "FBSDKSettings+Internal.h"
 
 #define FB_ARRAY_COUNT(x) sizeof(x) / sizeof(x[0])
 
 static const u_int FB_GROUP1_RECHECK_DURATION = 30 * 60; // seconds
 
-// Apple reports storage in binary gigabytes (1024^3) in their About menus, etc.
-static const u_int FB_GIGABYTE = 1024 * 1024 * 1024; // bytes
-
 @interface FBSDKAppEventsDeviceInfo ()
-
-// Ephemeral data, may change during the lifetime of an app.  We collect them in different
-// 'group' frequencies - group1 may gets collected once every 30 minutes.
-
-// group1
-@property (nonatomic) NSString *carrierName;
-@property (nonatomic) NSString *timeZoneAbbrev;
-@property (nonatomic) unsigned long long remainingDiskSpaceGB;
-@property (nonatomic) NSString *timeZoneName;
-
-// Persistent data, but we maintain it to make rebuilding the device info as fast as possible.
-@property (nonatomic) NSString *bundleIdentifier;
-@property (nonatomic) NSString *longVersion;
-@property (nonatomic) NSString *shortVersion;
-@property (nonatomic) NSString *sysVersion;
-@property (nonatomic) NSString *machine;
-@property (nonatomic) NSString *language;
-@property (nonatomic) unsigned long long totalDiskSpaceGB;
-@property (nonatomic) unsigned long long coreCount;
-@property (nonatomic) CGFloat width;
-@property (nonatomic) CGFloat height;
-@property (nonatomic) CGFloat density;
 
 // Other state
 @property (nonatomic) long lastGroup1CheckTime;
@@ -145,10 +118,6 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
   struct utsname systemInfo;
   uname(&systemInfo);
   self.machine = @(systemInfo.machine);
-
-  // Disk space stuff
-  float totalDiskSpace = [FBSDKAppEventsDeviceInfo _getTotalDiskSpace].floatValue;
-  self.totalDiskSpaceGB = (unsigned long long)round(totalDiskSpace / FB_GIGABYTE);
 }
 
 - (BOOL)_isGroup1Expired
@@ -179,14 +148,6 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
     }
   }
 
-  // Remaining disk space
-  float remainingDiskSpace = [FBSDKAppEventsDeviceInfo _getRemainingDiskSpace].floatValue;
-  unsigned long long newRemainingDiskSpaceGB = (unsigned long long)round(remainingDiskSpace / FB_GIGABYTE);
-  if (self.remainingDiskSpaceGB != newRemainingDiskSpaceGB) {
-    self.remainingDiskSpaceGB = newRemainingDiskSpaceGB;
-    self.isEncodingDirty = YES;
-  }
-
   self.lastGroup1CheckTime = [self unixTimeNow];
 }
 
@@ -209,8 +170,8 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
     self.height ? @((unsigned long)self.height) : @"",
     densityString,
     @(self.coreCount) ?: @"",
-    @(self.totalDiskSpaceGB) ?: @"",
-    @(self.remainingDiskSpaceGB) ?: @"",
+    @-1,
+    @-1,
     self.timeZoneName ?: @""
   ];
 
@@ -222,20 +183,6 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
 - (NSTimeInterval)unixTimeNow
 {
   return round([NSDate date].timeIntervalSince1970);
-}
-
-+ (NSNumber *)_getTotalDiskSpace
-{
-  NSDictionary<NSString *, id> *attrs = [[NSFileManager new] attributesOfFileSystemForPath:NSHomeDirectory()
-                                                                                     error:nil];
-  return attrs[NSFileSystemSize];
-}
-
-+ (NSNumber *)_getRemainingDiskSpace
-{
-  NSDictionary<NSString *, id> *attrs = [[NSFileManager new] attributesOfFileSystemForPath:NSHomeDirectory()
-                                                                                     error:nil];
-  return attrs[NSFileSystemFreeSize];
 }
 
 + (uint)_readCoreCount
@@ -253,7 +200,7 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 + (NSString *)_getCarrier
 {
-#if TARGET_OS_TV || TARGET_OS_SIMULATOR
+#if TARGET_OS_SIMULATOR
   return @"NoCarrier";
 #else
   // Dynamically load class for this so calling app doesn't need to link framework in.
@@ -265,7 +212,7 @@ static FBSDKAppEventsDeviceInfo *sharedInstance;
 
 #pragma clang diagnostic pop
 
-#if FBTEST && DEBUG
+#if DEBUG
 - (void)resetDependencies
 {
   self.settings = nil;

@@ -8,11 +8,11 @@
 
 #import "FBSDKErrorConfiguration.h"
 
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #import "FBSDKGraphRequestProtocol.h"
 #import "FBSDKInternalUtility+Internal.h"
-#import "FBSDKSettings.h"
 
 static NSString *const kErrorCategoryOther = @"other";
 static NSString *const kErrorCategoryTransient = @"transient";
@@ -62,7 +62,7 @@ static NSString *const kErrorCategoryLogin = @"login";
         @"ErrorRecovery.Login.Suggestion",
         @"FacebookSDK",
         [FBSDKInternalUtility.sharedUtility bundleForStrings],
-        @"Please log into this app again to reconnect your Facebook account.",
+        @"Please log in to this app again to reconnect your Facebook account.",
         @"The fallback message to display to recover invalidated tokens"
       );
       NSArray<NSDictionary<NSString *, id> *> *fallbackArray = @[

@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import FBSDKCoreKit_Basics
 import Foundation
@@ -61,17 +59,17 @@ public final class ShareCameraEffectContent: NSObject {
 
 // MARK: - Type Dependencies
 
-extension ShareCameraEffectContent: DependentType {
-  struct Dependencies {
+extension ShareCameraEffectContent: DependentAsType {
+  struct TypeDependencies {
     var internalUtility: InternalUtilityProtocol
     var errorFactory: ErrorCreating
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static var defaultDependencies: Dependencies? = Dependencies(
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(
     internalUtility: InternalUtility.shared,
-    errorFactory: ErrorFactory()
+    errorFactory: _ErrorFactory()
   )
 }
 
@@ -132,5 +130,3 @@ extension ShareCameraEffectContent: SharingContent {
     }
   }
 }
-
-#endif

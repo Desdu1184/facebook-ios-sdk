@@ -6,7 +6,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import FBAEMKit
+@testable import FBAEMKit
 import Foundation
 
 final class SampleAEMData { // swiftlint:disable:this convenience_type
@@ -15,7 +15,7 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     static let defaultCurrency = "default_currency"
     static let cutoffTime = "cutoff_time"
     static let validFrom = "valid_from"
-    static let configMode = "config_mode"
+    static let mode = "config_mode"
     static let conversionValueRules = "conversion_value_rules"
     static let conversionValue = "conversion_value"
     static let priority = "priority"
@@ -31,11 +31,11 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     static let USD = "USD"
   }
 
-  static let validConfigData1: [String: Any] = [
+  static let validConfigurationData1: [String: Any] = [
     Keys.defaultCurrency: Values.USD,
     Keys.cutoffTime: 1,
     Keys.validFrom: 10000,
-    Keys.configMode: Values.defaultMode,
+    Keys.mode: Values.defaultMode,
     Keys.conversionValueRules: [
       [
         Keys.conversionValue: 2,
@@ -52,11 +52,11 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     ],
   ]
 
-  static let validConfigData2: [String: Any] = [
+  static let validConfigurationData2: [String: Any] = [
     Keys.defaultCurrency: Values.USD,
     Keys.cutoffTime: 1,
     Keys.validFrom: 10001,
-    Keys.configMode: Values.defaultMode,
+    Keys.mode: Values.defaultMode,
     Keys.conversionValueRules: [
       [
         Keys.conversionValue: 2,
@@ -86,7 +86,7 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     Keys.defaultCurrency: Values.USD,
     Keys.cutoffTime: 1,
     Keys.validFrom: 20000,
-    Keys.configMode: Values.defaultMode,
+    Keys.mode: Values.defaultMode,
     Keys.conversionValueRules: [
       [
         Keys.conversionValue: 2,
@@ -101,15 +101,15 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
   ]
 
   static let validAdvertiserSingleEntryRule = AEMAdvertiserSingleEntryRule(
-    with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+    with: .contains,
     paramKey: "test",
     linguisticCondition: "hello",
-    numericalCondition: NSNumber(10),
+    numericalCondition: 10.0,
     arrayCondition: ["abv"]
   )
 
   static let validAdvertiserMultiEntryRule = AEMAdvertiserMultiEntryRule(
-    with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorAnd,
+    with: .and,
     rules: [validAdvertiserSingleEntryRule]
   )
 
@@ -120,7 +120,7 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
   static let validAdvertiserSingleEntryRuleJson3: [String: Any] = ["content": ["is_any": ["abc"]]]
 
   static let advertiserSingleEntryRule1 = AEMAdvertiserSingleEntryRule(
-    with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorStartsWith,
+    with: .startsWith,
     paramKey: "content",
     linguisticCondition: "abc",
     numericalCondition: nil,
@@ -128,15 +128,15 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
   )
 
   static let advertiserSingleEntryRule2 = AEMAdvertiserSingleEntryRule(
-    with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorLessThan,
+    with: .lessThan,
     paramKey: "value",
     linguisticCondition: nil,
-    numericalCondition: NSNumber(value: 10),
+    numericalCondition: 10,
     arrayCondition: nil
   )
 
   static let advertiserSingleEntryRule3 = AEMAdvertiserSingleEntryRule(
-    with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+    with: .isAny,
     paramKey: "content",
     linguisticCondition: nil,
     numericalCondition: nil,
@@ -147,11 +147,11 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     campaignID: "test_campaign_1234",
     acsToken: "test_token_1234567",
     acsSharedSecret: "test_shared_secret",
-    acsConfigID: "test_config_id_123",
+    acsConfigurationID: "test_config_id_123",
     businessID: "test_advertiserid_123",
     catalogID: nil,
     isTestMode: false,
-    hasSKAN: false,
+    hasStoreKitAdNetwork: false,
     isConversionFilteringEligible: true
   )! // swiftlint:disable:this force_unwrapping
 
@@ -159,11 +159,11 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     campaignID: "test_campaign_1235",
     acsToken: "test_token_2345678",
     acsSharedSecret: "test_shared_secret_124",
-    acsConfigID: "test_config_id_124",
+    acsConfigurationID: "test_config_id_124",
     businessID: "test_advertiserid_12346",
     catalogID: nil,
     isTestMode: false,
-    hasSKAN: false,
+    hasStoreKitAdNetwork: false,
     isConversionFilteringEligible: true
   )! // swiftlint:disable:this force_unwrapping
 
@@ -171,11 +171,11 @@ final class SampleAEMData { // swiftlint:disable:this convenience_type
     campaignID: "test_campaign_4321",
     acsToken: "test_token_7654",
     acsSharedSecret: "test_shared_secret_123",
-    acsConfigID: "test_config_id_333",
+    acsConfigurationID: "test_config_id_333",
     businessID: nil,
     catalogID: nil,
     isTestMode: false,
-    hasSKAN: false,
+    hasStoreKitAdNetwork: false,
     isConversionFilteringEligible: true
   )! // swiftlint:disable:this force_unwrapping
 }

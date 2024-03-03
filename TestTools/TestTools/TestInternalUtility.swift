@@ -54,7 +54,7 @@ public final class TestInternalUtility: NSObject,
   }
 
   public func facebookURL(
-    withHostPrefix hostPrefix: String,
+    hostPrefix: String,
     path: String,
     queryParameters: [String: String]
   ) throws -> URL {
@@ -81,7 +81,11 @@ public final class TestInternalUtility: NSObject,
 
   public func registerTransientObject(_ object: Any) {}
 
-  public func unregisterTransientObject(_ object: Any) {}
+  public var unregisterTransientObjectObject: Any?
+
+  public func unregisterTransientObject(_ object: Any) {
+    unregisterTransientObjectObject = object
+  }
 
   public func checkRegisteredCanOpenURLScheme(_ urlScheme: String) {}
 
@@ -133,6 +137,8 @@ public final class TestInternalUtility: NSObject,
 
   public func validateFacebookReservedURLSchemes() {}
 
+  public func detectFatalTrackingDomainsConfig() {}
+
   public var stubbedFBURLParameters: [String: Any]?
 
   public func parameters(fromFBURL url: URL) -> [String: Any] {
@@ -140,4 +146,6 @@ public final class TestInternalUtility: NSObject,
   }
 
   public var bundleForStrings: Bundle { .main }
+
+  public func topMostViewController() -> UIViewController? { nil }
 }

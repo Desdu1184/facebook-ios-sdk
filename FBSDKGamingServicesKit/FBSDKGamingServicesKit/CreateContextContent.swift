@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import Foundation
 
@@ -41,7 +39,7 @@ public final class CreateContextContent: NSObject, ValidatableProtocol {
   public func validate() throws {
     let hasPlayerID = !playerID.isEmpty
     guard hasPlayerID else {
-      throw ErrorFactory().requiredArgumentError(
+      throw _ErrorFactory().requiredArgumentError(
         name: "playerID",
         message: "The playerID is required.",
         underlyingError: nil
@@ -49,5 +47,3 @@ public final class CreateContextContent: NSObject, ValidatableProtocol {
     }
   }
 }
-
-#endif

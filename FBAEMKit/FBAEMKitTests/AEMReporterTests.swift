@@ -6,8 +6,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-@testable import FBSDKCoreKit_Basics
+@testable import FBAEMKit
 
+import FBSDKCoreKit_Basics
 import TestTools
 import XCTest
 
@@ -17,7 +18,7 @@ final class AEMReporterTests: XCTestCase {
     static let defaultCurrency = "default_currency"
     static let cutoffTime = "cutoff_time"
     static let validFrom = "valid_from"
-    static let configMode = "config_mode"
+    static let configurationMode = "config_mode"
     static let conversionValueRules = "conversion_value_rules"
     static let conversionValue = "conversion_value"
     static let priority = "priority"
@@ -28,6 +29,7 @@ final class AEMReporterTests: XCTestCase {
     static let campaignID = "campaign_id"
     static let catalogID = "catalog_id"
     static let contentID = "fb_content_ids"
+    static let content = "fb_content"
     static let token = "token"
   }
 
@@ -52,39 +54,41 @@ final class AEMReporterTests: XCTestCase {
     campaignID: name,
     acsToken: name,
     acsSharedSecret: nil,
-    acsConfigID: nil,
+    acsConfigurationID: nil,
     businessID: nil,
     catalogID: nil,
     isTestMode: false,
-    hasSKAN: false,
+    hasStoreKitAdNetwork: false,
     isConversionFilteringEligible: true
   )! // swiftlint:disable:this force_unwrapping
   lazy var reportFilePath = BasicUtility.persistenceFilePath(name)
   let urlWithInvocation = URL(string: "fb123://test.com?al_applink_data=%7B%22acs_token%22%3A+%22test_token_1234567%22%2C+%22campaign_ids%22%3A+%22test_campaign_1234%22%2C+%22advertiser_id%22%3A+%22test_advertiserid_12345%22%7D")! // swiftlint:disable:this force_unwrapping
   let sampleCatalogOptimizationDictionary = ["data": [["content_id_belongs_to_catalog_id": true]]]
   let aggregationRequestTimestampToNotDelay = Date().addingTimeInterval(-100)
-
-  override class func setUp() {
-    super.setUp()
-  }
+  let analyticsAppID = "analytics_123"
 
   override func setUp() {
     super.setUp()
 
     AEMReporter.reset()
     removeReportFile()
-    AEMReporter.configure(withNetworker: networker, appID: "123", reporter: reporter, store: userDefaultsSpy)
+    AEMReporter.configure(
+      networker: networker,
+      appID: "123",
+      reporter: reporter,
+      analyticsAppID: analyticsAppID,
+      store: userDefaultsSpy
+    )
     // Actual queue doesn't matter as long as it's not the same as the designated queue name in the class
-    AEMReporter.queue = DispatchQueue(label: name, qos: .background)
-    AEMReporter.isEnabled = true
-    AEMReporter.reportFilePath = reportFilePath
+    AEMReporter.serialQueue = DispatchQueue(label: name, qos: .background)
+    AEMReporter.isAEMReportEnabled = true
+    AEMReporter.reportFile = reportFilePath
   }
 
   func testEnable() {
-    AEMReporter.isEnabled = false
     AEMReporter.enable()
 
-    XCTAssertTrue(AEMReporter.isEnabled, "AEM Report should be enabled")
+    XCTAssertFalse(AEMReporter.isAEMReportEnabled, "AEM Report should not be enabled")
   }
 
   func testConversionFilteringDefaultConfigure() {
@@ -109,6 +113,23 @@ final class AEMReporterTests: XCTestCase {
     XCTAssertTrue(AEMReporter.isCatalogMatchingEnabled, "AEM Catalog Matching should be enabled")
   }
 
+  func testAdvertiserRuleMatchInServerEnabledDefaultConfigure() {
+    XCTAssertFalse(
+      AEMReporter.isAdvertiserRuleMatchInServerEnabled,
+      "AEM Advertiser Rule Match in server should be disabled by default"
+    )
+  }
+
+  func testSetAdvertiserRuleMatchInServerEnabled() {
+    AEMReporter.isAdvertiserRuleMatchInServerEnabled = false
+    AEMReporter.setAdvertiserRuleMatchInServerEnabled(true)
+
+    XCTAssertTrue(
+      AEMReporter.isAdvertiserRuleMatchInServerEnabled,
+      "AEM Advertiser Rule Match in server should be enabled"
+    )
+  }
+
   func testConfigure() {
     XCTAssertEqual(
       networker,
@@ -122,8 +143,13 @@ final class AEMReporterTests: XCTestCase {
     )
     XCTAssertEqual(
       userDefaultsSpy,
-      AEMReporter.store as? UserDefaultsSpy,
+      AEMReporter.dataStore as? UserDefaultsSpy,
       "Should configure with the expected data store"
+    )
+    XCTAssertEqual(
+      AEMReporter.analyticsAppID,
+      analyticsAppID,
+      "Should configure with the expected analytics app id"
     )
   }
 
@@ -152,134 +178,90 @@ final class AEMReporterTests: XCTestCase {
     }
 
     AEMReporter.invocations = [invocation]
-    AEMReporter._saveReportData()
-    let data = AEMReporter._loadReportData() as? [AEMInvocation]
-    XCTAssertEqual(data?.count, 1)
-    XCTAssertEqual(data?[0].acsToken, "test_token_1234567")
-    XCTAssertEqual(data?[0].campaignID, "test_campaign_1234")
-    XCTAssertEqual(data?[0].businessID, "test_advertiserid_12345")
-  }
-
-  func testLoadConfigs() {
-    AEMReporter._addConfigs([SampleAEMData.validConfigData1])
-    AEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
-    let loadedConfigs: NSMutableDictionary? = AEMReporter._loadConfigs()
-    XCTAssertEqual(loadedConfigs?.count, 1, "Should load the expected number of configs")
-
-    let defaultConfigs: [AEMConfiguration]? = loadedConfigs?[Values.defaultMode] as? [AEMConfiguration]
-    XCTAssertEqual(
-      defaultConfigs?.count, 2, "Should load the expected number of default configs"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[0].defaultCurrency, Values.USD, "Should save the expected default_currency of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[0].cutoffTime, 1, "Should save the expected cutoff_time of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[0].validFrom, 10000, "Should save the expected valid_from of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[0].configMode, Values.defaultMode, "Should save the expected config_mode of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[0].conversionValueRules.count, 1, "Should save the expected conversion_value_rules of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[1].defaultCurrency, Values.USD, "Should save the expected default_currency of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[1].cutoffTime, 1, "Should save the expected cutoff_time of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[1].validFrom, 10001, "Should save the expected valid_from of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[1].configMode, Values.defaultMode, "Should save the expected config_mode of the config"
-    )
-    XCTAssertEqual(
-      defaultConfigs?[1].conversionValueRules.count, 2, "Should save the expected conversion_value_rules of the config"
-    )
+    AEMReporter.saveReportData()
+    let data = AEMReporter.loadReportData()
+    XCTAssertEqual(data.count, 1)
+    XCTAssertEqual(data[0].acsToken, "test_token_1234567")
+    XCTAssertEqual(data[0].campaignID, "test_campaign_1234")
+    XCTAssertEqual(data[0].businessID, "test_advertiserid_12345")
   }
 
   func testClearCache() {
-    AEMReporter._addConfigs([SampleAEMData.validConfigData1])
-    AEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
+    AEMReporter.addConfigurations([SampleAEMData.validConfigurationData1])
+    AEMReporter.addConfigurations([SampleAEMData.validConfigurationData1, SampleAEMData.validConfigurationData2])
 
-    AEMReporter._clearCache()
-    var configs = AEMReporter.configs
-    var configList: [AEMConfiguration]? = configs[Values.defaultMode] as? [AEMConfiguration]
-    XCTAssertEqual(configList?.count, 1, "Should have the expected number of configs")
+    AEMReporter.clearCache()
+    var configurations = AEMReporter.configurations
+    var configList = configurations[Values.defaultMode]
+    XCTAssertEqual(configList?.count, 1, "Should have the expected number of configuration")
 
     guard let invocation1 = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
-      acsConfigID: "test_config_id_123",
+      acsConfigurationID: "test_config_id_123",
       businessID: nil,
       catalogID: nil,
       isTestMode: false,
-      hasSKAN: false,
+      hasStoreKitAdNetwork: false,
       isConversionFilteringEligible: true
     ), let invocation2 = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
-      acsConfigID: "test_config_id_123",
+      acsConfigurationID: "test_config_id_123",
       businessID: nil,
       catalogID: nil,
       isTestMode: false,
-      hasSKAN: false,
+      hasStoreKitAdNetwork: false,
       isConversionFilteringEligible: true
     )
     else { return XCTFail("Unwrapping Error") }
-    invocation1.setConfigID(10000)
-    invocation2.setConfigID(10001)
+    invocation1.configurationID = 10000
+    invocation2.configurationID = 10001
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
-    invocation2.setConversionTimestamp(date)
+    invocation2.conversionTimestamp = date
     AEMReporter.invocations = [invocation1, invocation2]
-    AEMReporter._addConfigs(
-      [SampleAEMData.validConfigData1, SampleAEMData.validConfigData2, SampleAEMData.validConfigData3]
+    AEMReporter.addConfigurations(
+      [SampleAEMData.validConfigurationData1, SampleAEMData.validConfigurationData2, SampleAEMData.validConfigData3]
     )
-    AEMReporter._clearCache()
-    guard let invocations = AEMReporter.invocations as? [AEMInvocation] else {
-      return XCTFail("Should have invocations")
-    }
+    AEMReporter.clearCache()
+    let invocations = AEMReporter.invocations
     XCTAssertEqual(invocations.count, 1, "Should clear the expired invocation")
-    XCTAssertEqual(invocations[0].configID, 10000, "Should keep the expected invocation")
-    configs = AEMReporter.configs
-    configList = configs[Values.defaultMode] as? [AEMConfiguration]
-    XCTAssertEqual(configList?.count, 2, "Should have the expected number of configs")
-    XCTAssertEqual(configList?[0].validFrom, 10000, "Should keep the expected config")
-    XCTAssertEqual(configList?[1].validFrom, 20000, "Should keep the expected config")
+    XCTAssertEqual(invocations[0].configurationID, 10000, "Should keep the expected invocation")
+    configurations = AEMReporter.configurations
+    configList = configurations[Values.defaultMode]
+    XCTAssertEqual(configList?.count, 2, "Should have the expected number of configuration")
+    XCTAssertEqual(configList?[0].validFrom, 10000, "Should keep the expected ")
+    XCTAssertEqual(configList?[1].validFrom, 20000, "Should keep the expected ")
   }
 
-  func testClearConfigs() {
-    AEMReporter.configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessIDAndContentRule()]),
-      Values.cpasMode: NSMutableArray(array: [SampleAEMConfigurations.createCpasConfig()]),
+  func testClearConfigurations() {
+    AEMReporter.configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessIDAndContentRule()],
+      Values.cpasMode: [SampleAEMConfigurations.createCpasConfiguration()],
     ]
 
-    AEMReporter._clearConfigs()
-    let defaultConfigs = AEMReporter.configs[Values.defaultMode] as? [AEMConfiguration]
-    let brandConfigs = AEMReporter.configs[Values.brandMode] as? [AEMConfiguration]
-    let cpasConfigs = AEMReporter.configs[Values.cpasMode] as? [AEMConfiguration]
+    AEMReporter.clearConfigurations()
+    let defaultConfigurations = AEMReporter.configurations[Values.defaultMode]
+    let brandConfigurations = AEMReporter.configurations[Values.brandMode]
+    let cpasConfigurations = AEMReporter.configurations[Values.cpasMode]
     XCTAssertEqual(
-      defaultConfigs?.count,
+      defaultConfigurations?.count,
       1,
-      "Should have default mode config"
+      "Should have default mode "
     )
     XCTAssertEqual(
-      brandConfigs?.count,
+      brandConfigurations?.count,
       0,
-      "Should not have brand mode config"
+      "Should not have brand mode "
     )
     XCTAssertEqual(
-      cpasConfigs?.count,
+      cpasConfigurations?.count,
       0,
-      "Should not have cpas mode config"
+      "Should not have cpas mode "
     )
   }
 
@@ -310,44 +292,44 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testIsConfigRefreshTimestampValid() {
-    AEMReporter.timestamp = Date()
+    AEMReporter.configRefreshTimestamp = Date()
     XCTAssertTrue(
-      AEMReporter._isConfigRefreshTimestampValid(),
+      AEMReporter.isConfigRefreshTimestampValid(),
       "Timestamp should be valid"
     )
 
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
-    AEMReporter.timestamp = date
+    AEMReporter.configRefreshTimestamp = date
     XCTAssertFalse(
-      AEMReporter._isConfigRefreshTimestampValid(),
+      AEMReporter.isConfigRefreshTimestampValid(),
       "Timestamp should not be valid"
     )
   }
 
   func testShouldEnforceRefresh() {
     AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
-    AEMReporter.timestamp = Date()
-    AEMReporter.configs = [
-      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()],
+    AEMReporter.configRefreshTimestamp = Date()
+    AEMReporter.configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
     XCTAssertTrue(
-      AEMReporter._shouldRefresh(withIsForced: true),
-      "Should refresh config if it's enforced"
+      AEMReporter.shouldRefresh(withIsForced: true),
+      "Should refresh  if it's enforced"
     )
   }
 
   func testShouldRefreshWithoutBusinessID1() {
     AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
-    AEMReporter.timestamp = Date()
-    AEMReporter.configs = [
-      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()],
+    AEMReporter.configRefreshTimestamp = Date()
+    AEMReporter.configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
     XCTAssertFalse(
-      AEMReporter._shouldRefresh(withIsForced: false),
-      "Should not refresh config if timestamp is not expired and there is no business ID"
+      AEMReporter.shouldRefresh(withIsForced: false),
+      "Should not refresh  if timestamp is not expired and there is no business ID"
     )
   }
 
@@ -355,14 +337,14 @@ final class AEMReporterTests: XCTestCase {
     AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
-    AEMReporter.timestamp = date
-    AEMReporter.configs = [
-      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()],
+    AEMReporter.configRefreshTimestamp = date
+    AEMReporter.configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
     XCTAssertTrue(
-      AEMReporter._shouldRefresh(withIsForced: false),
-      "Should not refresh config if timestamp is expired"
+      AEMReporter.shouldRefresh(withIsForced: false),
+      "Should not refresh  if timestamp is expired"
     )
   }
 
@@ -370,12 +352,12 @@ final class AEMReporterTests: XCTestCase {
     AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
-    AEMReporter.timestamp = date
-    AEMReporter.configs = [:]
+    AEMReporter.configRefreshTimestamp = date
+    AEMReporter.configurations = [:]
 
     XCTAssertTrue(
-      AEMReporter._shouldRefresh(withIsForced: false),
-      "Should not refresh config if configs is empty"
+      AEMReporter.shouldRefresh(withIsForced: false),
+      "Should not refresh  if configuration is empty"
     )
   }
 
@@ -384,19 +366,19 @@ final class AEMReporterTests: XCTestCase {
       SampleAEMData.invocationWithoutAdvertiserID,
       SampleAEMData.invocationWithAdvertiserID1,
     ]
-    AEMReporter.timestamp = Date()
-    AEMReporter.configs = [
-      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()],
+    AEMReporter.configRefreshTimestamp = Date()
+    AEMReporter.configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
     XCTAssertTrue(
-      AEMReporter._shouldRefresh(withIsForced: false),
-      "Should not refresh config if there exists an invocation with business ID"
+      AEMReporter.shouldRefresh(withIsForced: false),
+      "Should not refresh  if there exists an invocation with business ID"
     )
   }
 
   func testSendDebuggingRequest() {
-    AEMReporter._sendDebuggingRequest(SampleAEMInvocations.createDebuggingInvocation())
+    AEMReporter.sendDebuggingRequest(SampleAEMInvocations.createDebuggingInvocation())
 
     XCTAssertTrue(
       networker.capturedGraphPath?.hasSuffix("aem_conversions") == true,
@@ -411,7 +393,7 @@ final class AEMReporterTests: XCTestCase {
 
   func testDebuggingRequestParameters() {
     XCTAssertEqual(
-      AEMReporter._debuggingRequestParameters(SampleAEMInvocations.createDebuggingInvocation()) as NSDictionary,
+      AEMReporter.debuggingRequestParameters(SampleAEMInvocations.createDebuggingInvocation()) as NSDictionary,
       [
         "campaign_id": "debugging_campaign",
         "conversion_data": 0,
@@ -423,9 +405,24 @@ final class AEMReporterTests: XCTestCase {
     )
   }
 
+  func testRuleMatchRequestParameters() {
+    let businessIDs = ["123"]
+    let content = #"[{"id": "123", "quantity": 5}]"#
+    let parameters = AEMReporter.ruleMatchRequestParameters(businessIDs, content: content)
+    let expected = [
+      "advertiser_ids": #"["123"]"#,
+      "fb_content_data": content,
+    ]
+    XCTAssertEqual(
+      parameters as? [String: String],
+      expected,
+      "Rule match request parameter is not expected"
+    )
+  }
+
   func testSendAggregationRequest() {
     AEMReporter.invocations = []
-    AEMReporter._sendAggregationRequest()
+    AEMReporter.sendAggregationRequest()
     XCTAssertNil(
       networker.capturedGraphPath,
       "GraphRequest should not be created because of there is no invocation"
@@ -438,7 +435,7 @@ final class AEMReporterTests: XCTestCase {
     guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
     AEMReporter.invocations = [invocation]
-    AEMReporter._sendAggregationRequest()
+    AEMReporter.sendAggregationRequest()
     XCTAssertTrue(
       networker.capturedGraphPath?.hasSuffix("aem_conversions") == true,
       "GraphRequst should be created because of there is non-aggregated invocation"
@@ -455,7 +452,7 @@ final class AEMReporterTests: XCTestCase {
     guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
     AEMReporter.invocations = [invocation]
-    AEMReporter._sendAggregationRequest()
+    AEMReporter.sendAggregationRequest()
     XCTAssertNil(
       networker.capturedGraphPath,
       "GraphRequst should not be created immediately because of there is delay"
@@ -472,7 +469,7 @@ final class AEMReporterTests: XCTestCase {
     guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
     AEMReporter.invocations = [invocation]
-    AEMReporter._sendAggregationRequest()
+    AEMReporter.sendAggregationRequest()
 
     networker.capturedCompletionHandler?(nil, SampleAEMError())
     XCTAssertFalse(
@@ -489,7 +486,7 @@ final class AEMReporterTests: XCTestCase {
     guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
     AEMReporter.invocations = [invocation]
-    AEMReporter._sendAggregationRequest()
+    AEMReporter.sendAggregationRequest()
 
     networker.capturedCompletionHandler?(nil, nil)
     XCTAssertTrue(
@@ -503,23 +500,23 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testRecordAndUpdateEvents() {
-    AEMReporter.timestamp = Date()
+    AEMReporter.configRefreshTimestamp = Date()
     guard let invocation = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
-      acsConfigID: "test_config_id_123",
+      acsConfigurationID: "test_config_id_123",
       businessID: nil,
       catalogID: nil,
       isTestMode: false,
-      hasSKAN: false,
+      hasStoreKitAdNetwork: false,
       isConversionFilteringEligible: true
     )
     else { return XCTFail("Unwrapping Error") }
-    guard let config = AEMConfiguration(json: SampleAEMData.validConfigData3)
+    guard let configuration = AEMConfiguration(json: SampleAEMData.validConfigData3)
     else { return XCTFail("Unwrapping Error") }
 
-    AEMReporter.configs = [Values.defaultMode: [config]]
+    AEMReporter.configurations = [Values.defaultMode: [configuration]]
     AEMReporter.invocations = [invocation]
     AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
     // Invocation should be attributed and updated while request should be sent
@@ -529,7 +526,7 @@ final class AEMReporterTests: XCTestCase {
       "Invocation's cached events should be updated"
     )
     XCTAssertEqual(
-      invocation.recordedValues,
+      invocation.recordedValues as? [String: [String: Int]],
       [Values.purchase: [Values.USD: 100]],
       "Invocation's cached values should be updated"
     )
@@ -553,24 +550,24 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testRecordAndUpdateEventsWithAEMDisabled() {
-    AEMReporter.isEnabled = false
-    AEMReporter.timestamp = date
+    AEMReporter.isAEMReportEnabled = false
+    AEMReporter.configRefreshTimestamp = date
 
     AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
     XCTAssertNil(
       networker.capturedGraphPath,
-      "Should not create a request to fetch the config if AEM is disabled"
+      "Should not create a request to fetch the  if AEM is disabled"
     )
   }
 
   func testRecordAndUpdateEventsWithEmptyEvent() {
-    AEMReporter.timestamp = date
+    AEMReporter.configRefreshTimestamp = date
 
     AEMReporter.recordAndUpdate(event: "", currency: Values.USD, value: 100, parameters: nil)
 
     XCTAssertNil(
       networker.capturedGraphPath,
-      "Should not create a request to fetch the config if the event being recorded is empty"
+      "Should not create a request to fetch the  if the event being recorded is empty"
     )
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: reportFilePath),
@@ -578,8 +575,8 @@ final class AEMReporterTests: XCTestCase {
     )
   }
 
-  func testRecordAndUpdateEventsWithEmptyConfigs() throws {
-    AEMReporter.timestamp = date
+  func testRecordAndUpdateEventsWithEmptyConfigurations() throws {
+    AEMReporter.configRefreshTimestamp = date
     AEMReporter.invocations = [testInvocation]
 
     AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
@@ -596,13 +593,13 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithRefreshEnforced() {
-    guard let config = AEMConfiguration(json: SampleAEMData.validConfigData3)
+    guard let configuration = AEMConfiguration(json: SampleAEMData.validConfigData3)
     else { return XCTFail("Unwrapping Error") }
-    AEMReporter.timestamp = Date()
-    AEMReporter.configs = [Values.defaultMode: [config]]
+    AEMReporter.configRefreshTimestamp = Date()
+    AEMReporter.configurations = [Values.defaultMode: [configuration]]
 
     AEMReporter.isLoadingConfiguration = false
-    AEMReporter._loadConfiguration(withRefreshForced: true, block: nil)
+    AEMReporter.loadConfiguration(withRefreshForced: true, block: nil)
     guard
       let path = networker.capturedGraphPath,
       path.hasSuffix("aem_conversion_configs")
@@ -612,13 +609,13 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithBlock() {
-    guard let config = AEMConfiguration(json: SampleAEMData.validConfigData3)
+    guard let configuration = AEMConfiguration(json: SampleAEMData.validConfigData3)
     else { return XCTFail("Unwrapping Error") }
     var blockCall = 0
-    AEMReporter.timestamp = Date()
-    AEMReporter.configs = [Values.defaultMode: [config]]
+    AEMReporter.configRefreshTimestamp = Date()
+    AEMReporter.configurations = [Values.defaultMode: [configuration]]
 
-    AEMReporter._loadConfiguration(withRefreshForced: false) { _ in
+    AEMReporter.loadConfiguration(withRefreshForced: false) { _ in
       blockCall += 1
     }
     XCTAssertEqual(
@@ -629,10 +626,10 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithoutBlock() {
-    AEMReporter.timestamp = date
+    AEMReporter.configRefreshTimestamp = date
 
     AEMReporter.isLoadingConfiguration = false
-    AEMReporter._loadConfiguration(withRefreshForced: false, block: nil)
+    AEMReporter.loadConfiguration(withRefreshForced: false, block: nil)
     guard
       let path = networker.capturedGraphPath,
       path.hasSuffix("aem_conversion_configs")
@@ -642,38 +639,40 @@ final class AEMReporterTests: XCTestCase {
   }
 
   func testGetConfigRequestParameterWithoutAdvertiserIDs() {
-    AEMReporter.invocations = NSMutableArray(array: [SampleAEMData.invocationWithoutAdvertiserID])
+    AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
 
     XCTAssertEqual(
-      AEMReporter._requestParameters() as NSDictionary,
+      AEMReporter.requestParameters() as NSDictionary,
       ["fields": "", "advertiser_ids": "[]"],
-      "Should not have unexpected advertiserIDs in config request params"
+      "Should not have unexpected advertiserIDs in configuration request params"
     )
   }
 
   func testGetConfigRequestParameterWithAdvertiserIDs() {
-    AEMReporter.invocations =
-      NSMutableArray(array: [SampleAEMData.invocationWithAdvertiserID1, SampleAEMData.invocationWithoutAdvertiserID])
+    AEMReporter.invocations = [SampleAEMData.invocationWithAdvertiserID1, SampleAEMData.invocationWithoutAdvertiserID]
 
     XCTAssertEqual(
-      AEMReporter._requestParameters() as NSDictionary,
+      AEMReporter.requestParameters() as NSDictionary,
       ["fields": "", "advertiser_ids": #"["\#(SampleAEMData.invocationWithAdvertiserID1.businessID!)"]"#], // swiftlint:disable:this force_unwrapping
-      "Should have expected advertiserIDs in config request params"
+      "Should have expected advertiserIDs in configuration request params"
     )
 
-    AEMReporter.invocations =
-      NSMutableArray(array: [SampleAEMData.invocationWithAdvertiserID1, SampleAEMData.invocationWithAdvertiserID2, SampleAEMData.invocationWithoutAdvertiserID]) // swiftlint:disable:this line_length
+    AEMReporter.invocations = [
+      SampleAEMData.invocationWithAdvertiserID1,
+      SampleAEMData.invocationWithAdvertiserID2,
+      SampleAEMData.invocationWithoutAdvertiserID,
+    ]
 
     XCTAssertEqual(
-      AEMReporter._requestParameters() as NSDictionary,
+      AEMReporter.requestParameters() as NSDictionary,
       ["fields": "", "advertiser_ids": #"["\#(SampleAEMData.invocationWithAdvertiserID1.businessID!)","\#(SampleAEMData.invocationWithAdvertiserID2.businessID!)"]"#], // swiftlint:disable:this force_unwrapping
-      "Should have expected advertiserIDs in config request params"
+      "Should have expected advertiserIDs in configuration request params"
     )
   }
 
   func testGetAggregationRequestParameterWithoutAdvertiserID() {
     let params: [String: Any] =
-      AEMReporter._aggregationRequestParameters(SampleAEMData.invocationWithoutAdvertiserID)
+      AEMReporter.aggregationRequestParameters(SampleAEMData.invocationWithoutAdvertiserID)
 
     XCTAssertEqual(
       params[Keys.campaignID] as? String,
@@ -693,7 +692,7 @@ final class AEMReporterTests: XCTestCase {
 
   func testGetAggregationRequestParameterWithAdvertiserID() {
     let params: [String: Any] =
-      AEMReporter._aggregationRequestParameters(SampleAEMData.invocationWithAdvertiserID1)
+      AEMReporter.aggregationRequestParameters(SampleAEMData.invocationWithAdvertiserID1)
 
     XCTAssertEqual(
       params[Keys.campaignID] as? String,
@@ -717,18 +716,18 @@ final class AEMReporterTests: XCTestCase {
       SampleAEMData.invocationWithAdvertiserID1,
       SampleAEMData.invocationWithAdvertiserID2,
     ]
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       invocations,
       event: Values.purchase,
       currency: nil,
       value: nil,
       parameters: nil,
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNotNil(
       attributedInvocation,
@@ -746,18 +745,18 @@ final class AEMReporterTests: XCTestCase {
       SampleAEMData.invocationWithAdvertiserID1,
       SampleAEMData.invocationWithAdvertiserID2,
     ]
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       invocations,
       event: "test",
       currency: nil,
       value: nil,
       parameters: ["values": "abcdefg"],
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNil(
       attributedInvocation,
@@ -771,18 +770,18 @@ final class AEMReporterTests: XCTestCase {
       SampleAEMData.invocationWithAdvertiserID1,
       SampleAEMData.invocationWithAdvertiserID2,
     ]
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       invocations,
       event: Values.purchase,
       currency: nil,
       value: nil,
       parameters: ["value": "abcdefg"],
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNotNil(
       attributedInvocation,
@@ -799,18 +798,18 @@ final class AEMReporterTests: XCTestCase {
     let invocation1 = SampleAEMInvocations.createGeneralInvocation1()
     let invocation2 = SampleAEMInvocations.createGeneralInvocation2()
     let invocations = [invocation1, invocation2]
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       invocations,
       event: Values.purchase,
       currency: nil,
       value: nil,
       parameters: nil,
-      configs: configs
+      configurations: configurations
     )
     XCTAssertEqual(
       attributedInvocation?.campaignID,
@@ -823,18 +822,18 @@ final class AEMReporterTests: XCTestCase {
     let invocation1 = SampleAEMInvocations.createGeneralInvocation1()
     let invocation2 = SampleAEMInvocations.createGeneralInvocation2()
     let invocations = [invocation1, invocation2]
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
-      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
+      Values.brandMode: [SampleAEMConfigurations.createConfigurationWithBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       invocations,
       event: "test",
       currency: nil,
       value: nil,
       parameters: nil,
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNil(
       attributedInvocation,
@@ -847,30 +846,28 @@ final class AEMReporterTests: XCTestCase {
     reporter.reportingEvents = [Values.purchase]
     let invocation = SampleAEMInvocations.createSKANOverlappedInvocation()
 
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       [invocation],
       event: Values.purchase,
       currency: Values.USD,
       value: 10,
       parameters: ["value": "abcdefg"],
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNil(
       attributedInvocation,
       "Should not have invocation attributed with double counting"
     )
-    XCTAssertEqual(
-      invocation.recordedEvents,
-      [],
+    XCTAssertTrue(
+      invocation.recordedEvents.isEmpty,
       "Should not expect invocation's recorded events to be changed with double counting"
     )
-    XCTAssertEqual(
-      invocation.recordedValues,
-      [:],
+    XCTAssertTrue(
+      invocation.recordedValues.isEmpty,
       "Should not expect invocation's recorded values to be changed with double counting"
     )
   }
@@ -880,17 +877,17 @@ final class AEMReporterTests: XCTestCase {
     reporter.reportingEvents = [Values.purchase]
     let invocation = SampleAEMInvocations.createGeneralInvocation1()
 
-    let configs = [
-      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+    let configurations = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigurationWithoutBusinessID()],
     ]
 
-    let attributedInvocation = AEMReporter._attributedInvocation(
+    let attributedInvocation = AEMReporter.attributedInvocation(
       [invocation],
       event: Values.purchase,
       currency: Values.USD,
       value: 10,
       parameters: ["value": "abcdefg"],
-      configs: configs
+      configurations: configurations
     )
     XCTAssertNotNil(
       attributedInvocation,
@@ -904,11 +901,11 @@ final class AEMReporterTests: XCTestCase {
     let invocation = SampleAEMInvocations.createSKANOverlappedInvocation()
 
     XCTAssertTrue(
-      AEMReporter._isDoubleCounting(invocation, event: "fb_test"),
+      AEMReporter.isDoubleCounting(invocation, event: "fb_test"),
       "Should expect double counting"
     )
     XCTAssertFalse(
-      AEMReporter._isDoubleCounting(invocation, event: "test"),
+      AEMReporter.isDoubleCounting(invocation, event: "test"),
       "Should not expect double counting"
     )
   }
@@ -919,7 +916,7 @@ final class AEMReporterTests: XCTestCase {
     let invocation = SampleAEMInvocations.createSKANOverlappedInvocation()
 
     XCTAssertFalse(
-      AEMReporter._isDoubleCounting(invocation, event: "fb_test"),
+      AEMReporter.isDoubleCounting(invocation, event: "fb_test"),
       "Should not expect double counting with SKAN cutoff"
     )
   }
@@ -930,7 +927,7 @@ final class AEMReporterTests: XCTestCase {
     let invocation = SampleAEMInvocations.createGeneralInvocation1()
 
     XCTAssertFalse(
-      AEMReporter._isDoubleCounting(invocation, event: "fb_test"),
+      AEMReporter.isDoubleCounting(invocation, event: "fb_test"),
       "Should not expect double counting without SKAN click"
     )
   }
@@ -941,7 +938,7 @@ final class AEMReporterTests: XCTestCase {
     let invocation = SampleAEMInvocations.createCatalogOptimizedInvocation()
     var blockCall = 0
 
-    AEMReporter._loadCatalogOptimization(with: invocation, contentID: nil) {
+    AEMReporter.loadCatalogOptimization(with: invocation, contentID: nil) {
       blockCall += 1
     }
     XCTAssertTrue(
@@ -955,7 +952,7 @@ final class AEMReporterTests: XCTestCase {
     let invocation = SampleAEMInvocations.createCatalogOptimizedInvocation()
     var blockCall = 0
 
-    AEMReporter._loadCatalogOptimization(with: invocation, contentID: "test_content_id") {
+    AEMReporter.loadCatalogOptimization(with: invocation, contentID: "test_content_id") {
       blockCall += 1
     }
     XCTAssertTrue(
@@ -973,7 +970,7 @@ final class AEMReporterTests: XCTestCase {
   func testLoadCatalogOptimizationWithFuzzyInput() {
     let invocation = SampleAEMInvocations.createCatalogOptimizedInvocation()
 
-    AEMReporter._loadCatalogOptimization(with: invocation, contentID: "test_content_id") {}
+    AEMReporter.loadCatalogOptimization(with: invocation, contentID: "test_content_id") {}
     for _ in 0 ..< 100 {
       networker.capturedCompletionHandler?(
         Fuzzer.randomize(json: sampleCatalogOptimizationDictionary),
@@ -986,13 +983,13 @@ final class AEMReporterTests: XCTestCase {
     var data = [
       "data": [["content_id_belongs_to_catalog_id": true]],
     ]
-    XCTAssertTrue(AEMReporter._isContentOptimized(data), "Should expect content is optimized")
+    XCTAssertTrue(AEMReporter.isContentOptimized(data), "Should expect content is optimized")
     data = ["data": [["content_id_belongs_to_catalog_id": false]]]
-    XCTAssertFalse(AEMReporter._isContentOptimized(data), "Should expect content is optimized")
+    XCTAssertFalse(AEMReporter.isContentOptimized(data), "Should expect content is optimized")
   }
 
   func testCatalogRequestParameters() {
-    let params = AEMReporter._catalogRequestParameters("test_catalog", contentID: "test_content_id")
+    let params = AEMReporter.catalogRequestParameters("test_catalog", contentID: "test_content_id")
 
     XCTAssertEqual(
       params as NSDictionary,
@@ -1009,7 +1006,7 @@ final class AEMReporterTests: XCTestCase {
 
     for catalogID in malformedInput {
       for contentID in malformedInput {
-        AEMReporter._catalogRequestParameters(catalogID, contentID: contentID)
+        _ = AEMReporter.catalogRequestParameters(catalogID, contentID: contentID)
       }
     }
   }
@@ -1028,12 +1025,12 @@ final class AEMReporterTests: XCTestCase {
                isOptimizedEvent,
                catalogID != nil {
               XCTAssertTrue(
-                AEMReporter._shouldReportConversion(inCatalogLevel: testInvocation, event: Values.purchase),
+                AEMReporter.shouldReportConversion(inCatalogLevel: testInvocation, event: Values.purchase),
                 "Should expect to report conversion in catalog level"
               )
             } else {
               XCTAssertFalse(
-                AEMReporter._shouldReportConversion(inCatalogLevel: testInvocation, event: Values.purchase),
+                AEMReporter.shouldReportConversion(inCatalogLevel: testInvocation, event: Values.purchase),
                 "Should expect not to report conversion in catalog level"
               )
             }
@@ -1043,12 +1040,32 @@ final class AEMReporterTests: XCTestCase {
     }
   }
 
+  // MARK: - Rule Match in Server
+
+  func testLoadRuleMatch() {
+    let content = #"[{"id": "123", "quantity": 5}]"#
+    AEMReporter.loadRuleMatch(["123"], event: "test", currency: nil, value: nil, parameters: [Keys.content: content])
+    let expectedParameters = [
+      "advertiser_ids": #"["123"]"#,
+      "fb_content_data": content,
+    ]
+    XCTAssertTrue(
+      (networker.capturedGraphPath?.contains("aem_attribution")) == true,
+      "Should start the rule match request"
+    )
+    XCTAssertEqual(
+      networker.capturedParameters as? [String: String],
+      expectedParameters,
+      "Should have the expected parameters in the rule match request"
+    )
+  }
+
   // MARK: - Aggregation Request
 
   func testShouldDelayAggregationRequestWithNilTimestamp() {
     AEMReporter.minAggregationRequestTimestamp = nil
     XCTAssertFalse(
-      AEMReporter._shouldDelayAggregationRequest(),
+      AEMReporter.shouldDelayAggregationRequest(),
       "Should not expect to delay aggregation request when timestamp is nil"
     )
   }
@@ -1056,7 +1073,7 @@ final class AEMReporterTests: XCTestCase {
   func testShouldDelayAggregationRequestWithExpiredTimestamp() {
     AEMReporter.minAggregationRequestTimestamp = aggregationRequestTimestampToNotDelay
     XCTAssertFalse(
-      AEMReporter._shouldDelayAggregationRequest(),
+      AEMReporter.shouldDelayAggregationRequest(),
       "Should not expect to delay aggregation request when timestamp is expired"
     )
   }
@@ -1064,7 +1081,7 @@ final class AEMReporterTests: XCTestCase {
   func testShouldDelayAggregationRequestWithValidTimestamp() {
     AEMReporter.minAggregationRequestTimestamp = Date().addingTimeInterval(5)
     XCTAssertTrue(
-      AEMReporter._shouldDelayAggregationRequest(),
+      AEMReporter.shouldDelayAggregationRequest(),
       "Should not expect to delay aggregation request when timestamp is within the range"
     )
   }
@@ -1076,7 +1093,7 @@ final class AEMReporterTests: XCTestCase {
       forKey: "com.facebook.sdk:FBAEMMinAggregationRequestTimestamp"
     )
 
-    let data = AEMReporter._loadMinAggregationRequestTimestamp()
+    let data = AEMReporter.loadMinAggregationRequestTimestamp()
     XCTAssertEqual(
       timestamp,
       data,
@@ -1091,7 +1108,7 @@ final class AEMReporterTests: XCTestCase {
 
   func testUpdateAggregationRequestTimestamp() {
     let timestamp = Date().timeIntervalSince1970
-    AEMReporter._updateAggregationRequestTimestamp(timestamp)
+    AEMReporter.updateAggregationRequestTimestamp(timestamp)
 
     XCTAssertEqual(
       timestamp,

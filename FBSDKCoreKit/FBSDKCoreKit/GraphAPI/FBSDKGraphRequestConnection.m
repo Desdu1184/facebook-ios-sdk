@@ -8,30 +8,17 @@
 
 #import "FBSDKGraphRequestConnection+Internal.h"
 
-#import <FBSDKCoreKit/FBSDKCoreKit.h>
-#import <FBSDKCoreKit/FBSDKGraphRequestConnectionDelegate.h>
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 
-#import "FBSDKAccessToken.h"
-#import "FBSDKAuthenticationToken.h"
-#import "FBSDKCoreKitVersions.h"
-#import "FBSDKErrorConfigurationProvider.h"
 #import "FBSDKErrorRecoveryAttempter.h"
 #import "FBSDKGraphRequest+Internal.h"
 #import "FBSDKGraphRequestBody.h"
-#import "FBSDKGraphRequestConnectionFactoryProtocol.h"
-#import "FBSDKGraphRequestDataAttachment.h"
 #import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger+Internal.h"
-#import "FBSDKOperatingSystemVersionComparing.h"
 #import "FBSDKSafeCast.h"
-#import "FBSDKSettingsProtocol.h"
-#import "FBSDKURLSessionProxying.h"
+#import "FBSDKDomainHandler.h"
 
 NSString *const FBSDKNonJSONResponseProperty = @"FACEBOOK_NON_JSON_RESULT";
-
-// URL construction constants
-static NSString *const kGraphURLPrefix = @"graph.";
-static NSString *const kGraphVideoURLPrefix = @"graph-video.";
 
 static NSString *const kBatchKey = @"batch";
 static NSString *const kBatchMethodKey = @"method";
@@ -41,13 +28,8 @@ static NSString *const kBatchFileNamePrefix = @"file";
 static NSString *const kBatchEntryName = @"name";
 
 static NSString *const kAccessTokenKey = @"access_token";
-#if TARGET_OS_TV
-static NSString *const kSDK = @"tvos";
-static NSString *const kUserAgentBase = @"FBtvOSSDK";
-#else
 static NSString *const kSDK = @"ios";
 static NSString *const kUserAgentBase = @"FBiOSSDK";
-#endif
 static NSString *const kBatchRestMethodBaseURL = @"method/";
 
 static NSTimeInterval g_defaultTimeout = 60.0;
@@ -80,11 +62,7 @@ static FBSDKAccessToken *_Nullable _CreateExpiredAccessToken(FBSDKAccessToken *a
 // Private properties and methods
 
 @interface FBSDKGraphRequestConnection ()
-#if TARGET_OS_TV
-<NSURLSessionDataDelegate>
-#else
 <NSURLSessionDataDelegate, FBSDKGraphErrorRecoveryProcessorDelegate>
-#endif
 
 @property (class, nonatomic) BOOL hasBeenConfigured;
 
@@ -96,6 +74,7 @@ static FBSDKAccessToken *_Nullable _CreateExpiredAccessToken(FBSDKAccessToken *a
 @implementation FBSDKGraphRequestConnection
 
 static BOOL _canMakeRequests = NO;
+static BOOL _didFetchDomainConfiguration = NO;
 
 // MARK: Dependency Management
 
@@ -109,7 +88,6 @@ static id<FBSDKEventLogging> _eventLogger;
 static id<FBSDKOperatingSystemVersionComparing> _operatingSystemVersionComparer;
 static id<FBSDKMacCatalystDetermining> _macCatalystDeterminator;
 static Class<FBSDKAccessTokenProviding> _accessTokenProvider;
-static Class<FBSDKAccessTokenSetting> _accessTokenSetter;
 static id<FBSDKErrorCreating> _errorFactory;
 static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 
@@ -213,16 +191,6 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   _accessTokenProvider = accessTokenProvider;
 }
 
-+ (nullable Class<FBSDKAccessTokenSetting>)accessTokenSetter
-{
-  return _accessTokenSetter;
-}
-
-+ (void)setAccessTokenSetter:(nullable Class<FBSDKAccessTokenSetting>)accessTokenSetter
-{
-  _accessTokenSetter = accessTokenSetter;
-}
-
 + (nullable id<FBSDKErrorCreating>)errorFactory
 {
   return _errorFactory;
@@ -252,7 +220,6 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
              operatingSystemVersionComparer:(nonnull id<FBSDKOperatingSystemVersionComparing>)operatingSystemVersionComparer
                     macCatalystDeterminator:(nonnull id<FBSDKMacCatalystDetermining>)macCatalystDeterminator
                         accessTokenProvider:(nonnull Class<FBSDKAccessTokenProviding>)accessTokenProvider
-                          accessTokenSetter:(nonnull Class<FBSDKAccessTokenSetting>)accessTokenSetter
                                errorFactory:(nonnull id<FBSDKErrorCreating>)errorFactory
                 authenticationTokenProvider:(nonnull Class<FBSDKAuthenticationTokenProviding>)authenticationTokenProvider
 {
@@ -269,14 +236,13 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   self.operatingSystemVersionComparer = operatingSystemVersionComparer;
   self.macCatalystDeterminator = macCatalystDeterminator;
   self.accessTokenProvider = accessTokenProvider;
-  self.accessTokenSetter = accessTokenSetter;
   self.errorFactory = errorFactory;
   self.authenticationTokenProvider = authenticationTokenProvider;
 
   self.hasBeenConfigured = YES;
 }
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 + (void)resetClassDependencies
 {
@@ -290,7 +256,6 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   self.operatingSystemVersionComparer = nil;
   self.macCatalystDeterminator = nil;
   self.accessTokenProvider = nil;
-  self.accessTokenSetter = nil;
   self.errorFactory = nil;
   self.authenticationTokenProvider = nil;
 }
@@ -354,8 +319,40 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   FBSDKGraphRequestMetadata *metadata = [[FBSDKGraphRequestMetadata alloc] initWithRequest:request
                                                                          completionHandler:completion
                                                                            batchParameters:parameters];
+  if (@available(iOS 14.5, *)) {
+    // Add request if it is for fetching the domain config or we have the domain config
+    if ([FBSDKGraphRequest isForFetchingDomainConfiguration:metadata.request] || [self.class didFetchDomainConfiguration]) {
+      [FBSDKTypeUtility array:self.requests addObject:metadata];
+    } else {
+      [[FBSDKGraphRequestQueue sharedInstance] enqueueRequestMetadata:metadata];
+    }
+  } else {
+    [FBSDKTypeUtility array:self.requests addObject:metadata];
+  }
+}
 
-  [FBSDKTypeUtility array:self.requests addObject:metadata];
+- (BOOL)shouldPiggyBackRequests
+{
+  if (@available(iOS 14.5, *)) {
+    // We can piggy back on batch requests
+    if (self.requests.count > 1) {
+      return YES;
+    }
+    id<FBSDKGraphRequest> request = self.requests.firstObject.request;
+    // We should not piggy back on the request to fetch the domain config
+    if ([FBSDKGraphRequest isForFetchingDomainConfiguration:request]) {
+      return NO;
+    }
+    // We should not piggy back on requests explicitly listed in the domain config when domain handling is enabled
+    NSString *graphPath = [FBSDKDomainHandler getCleanedGraphPathFromRequest:request];
+    if ([[FBSDKDomainHandler sharedInstance] isDomainHandlingEnabled]
+        && [[FBSDKDomainHandler sharedInstance] getATTScopeEndpointForGraphPath:graphPath]) {
+      return NO;
+    }
+    return YES;
+  } else {
+    return YES;
+  }
 }
 
 - (void)cancel
@@ -382,14 +379,20 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 
     return;
   }
-
+  
+  if (self.requests.count == 0) {
+    return;
+  }
+  
   if (self.state != FBSDKGraphRequestConnectionStateCreated
       && self.state != FBSDKGraphRequestConnectionStateSerialized) {
     [self.logger.class singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
                                  logEntry:@"FBSDKGraphRequestConnection cannot be started again."];
     return;
   }
-  [self.class.piggybackManager addPiggybackRequests:self];
+  if ([self shouldPiggyBackRequests]) {
+    [self.class.piggybackManager addPiggybackRequests:self];
+  }
   NSMutableURLRequest *request = [self requestWithBatch:self.requests timeout:self.timeout];
 
   self.state = FBSDKGraphRequestConnectionStateStarted;
@@ -444,6 +447,16 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   return _canMakeRequests;
 }
 
++ (void)setDidFetchDomainConfiguration
+{
+  _didFetchDomainConfiguration = YES;
+}
+
++ (BOOL)didFetchDomainConfiguration
+{
+  return _didFetchDomainConfiguration;
+}
+
 #pragma mark - Private methods (request generation)
 
 //
@@ -470,7 +483,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
     [self registerTokenToOmitFromLog:batchToken];
   }
 
-  NSString *urlString = [self urlStringForSingleRequest:metadata.request forBatch:YES];
+  NSString *urlString = [self urlStringForRequestInBatch:metadata.request];
   [FBSDKTypeUtility dictionary:requestElement setObject:urlString forKey:kBatchRelativeURLKey];
   [FBSDKTypeUtility dictionary:requestElement setObject:metadata.request.HTTPMethod forKey:kBatchMethodKey];
 
@@ -535,8 +548,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   for (FBSDKGraphRequestMetadata *metadata in requests) {
     NSString *individualToken = [self accessTokenWithRequest:metadata.request];
     BOOL isClientToken = self.class.settings.clientToken && [individualToken hasSuffix:self.class.settings.clientToken];
-    if (!batchToken
-        && !isClientToken) {
+    if (!batchToken && !isClientToken) {
       batchToken = individualToken;
     }
     [self addRequest:metadata
@@ -611,7 +623,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 
   if (requests.count == 1) {
     FBSDKGraphRequestMetadata *metadata = requests.firstObject;
-    NSURL *url = [NSURL URLWithString:[self urlStringForSingleRequest:metadata.request forBatch:NO]];
+    NSURL *url = [NSURL URLWithString:[self urlStringForSingleRequest:metadata.request]];
     request = [NSMutableURLRequest requestWithURL:url
                                       cachePolicy:NSURLRequestUseProtocolCachePolicy
                                   timeoutInterval:timeout];
@@ -650,8 +662,11 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
                 addFormData:NO
                      logger:attachmentLogger];
 
+    // Get request prefix based on domain split
+    NSString *prefix = [[FBSDKDomainHandler sharedInstance] getURLPrefixForBatchRequest:requests
+                                                      isAdvertiserTrackingEnabled:self.class.settings.isAdvertiserTrackingEnabled];
     NSURL *url = [FBSDKInternalUtility.sharedUtility
-                  facebookURLWithHostPrefix:kGraphURLPrefix
+                  facebookURLWithHostPrefix:prefix
                   path:@""
                   queryParameters:@{}
                   defaultVersion:self.overriddenVersionPart
@@ -688,61 +703,50 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
   }
 }
 
-//
-// Generates a URL for a batch containing only a single request,
-// and names all attachments that need to go in the body of the
-// request.
-//
-// The URL contains all parameters that are not body attachments,
-// including the session key if present.
-//
-// Attachments are named and referenced by name in the URL.
-//
-- (NSString *)urlStringForSingleRequest:(id<FBSDKGraphRequest>)request forBatch:(BOOL)forBatch
+- (NSDictionary *)getURLParamsForRequest:(id<FBSDKGraphRequest>)request
 {
   NSMutableDictionary<NSString *, id> *params = [NSMutableDictionary dictionaryWithDictionary:request.parameters];
   [FBSDKTypeUtility dictionary:params setObject:@"json" forKey:@"format"];
   [FBSDKTypeUtility dictionary:params setObject:kSDK forKey:@"sdk"];
   [FBSDKTypeUtility dictionary:params setObject:@"false" forKey:@"include_headers"];
+  return params;
+}
 
-  request.parameters = params;
+- (NSString *)urlStringForRequestInBatch:(id<FBSDKGraphRequest>)request
+{
+  request.parameters = [self getURLParamsForRequest:request].copy;
+  NSString *url = [FBSDKGraphRequest serializeURL:request.graphPath
+                                           params:request.parameters
+                                       httpMethod:request.HTTPMethod
+                                         forBatch:YES];
+  return url;
+}
 
-  NSString *baseURL;
-  if (forBatch) {
-    baseURL = request.graphPath;
-  } else {
-    NSString *token = [self accessTokenWithRequest:request];
-    if (token) {
-      [params setValue:token forKey:kAccessTokenKey];
-      request.parameters = params;
-      [self registerTokenToOmitFromLog:token];
-    }
-
-    NSString *prefix = kGraphURLPrefix;
-    // We special case a graph post to <id>/videos and send it to graph-video.facebook.com
-    // We only do this for non batch post requests
-    NSString *graphPath = request.graphPath.lowercaseString;
-    if ([request.HTTPMethod.uppercaseString isEqualToString:@"POST"]
-        && [graphPath hasSuffix:@"/videos"]) {
-      graphPath = [graphPath stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]];
-      NSArray<NSString *> *components = [graphPath componentsSeparatedByString:@"/"];
-      if (components.count == 2) {
-        prefix = kGraphVideoURLPrefix;
-      }
-    }
-
-    baseURL = [FBSDKInternalUtility.sharedUtility
-               facebookURLWithHostPrefix:prefix
-               path:request.graphPath
-               queryParameters:@{}
-               defaultVersion:request.version
-               error:NULL].absoluteString;
+- (NSString *)urlStringForSingleRequest:(id<FBSDKGraphRequest>)request
+{
+  NSDictionary<NSString *, id> *params = [self getURLParamsForRequest:request];
+  NSString *token = [self accessTokenWithRequest:request];
+  if (token) {
+    [params setValue:token forKey:kAccessTokenKey];
+    [self registerTokenToOmitFromLog:token];
   }
+  
+  // Get request prefix based on domain split
+  NSString *prefix = [[FBSDKDomainHandler sharedInstance] getURLPrefixForSingleRequest:request
+                                              isAdvertiserTrackingEnabled:self.class.settings.isAdvertiserTrackingEnabled];
 
+  NSString *baseURL = [FBSDKInternalUtility.sharedUtility
+             facebookURLWithHostPrefix:prefix
+             path:request.graphPath
+             queryParameters:@{}
+             defaultVersion:request.version
+             error:NULL].absoluteString;
+  
+  request.parameters = params.copy;
   NSString *url = [FBSDKGraphRequest serializeURL:baseURL
                                            params:request.parameters
                                        httpMethod:request.HTTPMethod
-                                         forBatch:forBatch];
+                                         forBatch:NO];
   return url;
 }
 
@@ -1011,9 +1015,9 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
       return;
     }
     if (errorSubcode == 493) {
-      [self.class.accessTokenSetter setCurrentAccessToken:_CreateExpiredAccessToken([self.class.accessTokenProvider currentAccessToken])];
+      [self.class.accessTokenProvider setCurrentAccessToken:_CreateExpiredAccessToken([self.class.accessTokenProvider currentAccessToken])];
     } else {
-      [self.class.accessTokenSetter setCurrentAccessToken:nil];
+      [self.class.accessTokenProvider setCurrentAccessToken:nil];
     }
   };
 
@@ -1318,7 +1322,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
     agentWithSuffix = [NSString stringWithFormat:@"%@/%@", agent, self.class.settings.userAgentSuffix];
   }
   if (@available(iOS 13.0, *)) {
-    if (self.class.macCatalystDeterminator.isMacCatalystApp) {
+    if (self.class.macCatalystDeterminator.fb_isMacCatalystApp) {
       return [NSString stringWithFormat:@"%@/%@", agentWithSuffix ?: agent, @"macOS"];
     }
   }
@@ -1358,6 +1362,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
                                                                              HTTPMethod:originalRequest.HTTPMethod
                                                                                 version:originalRequest.version
                                                                                   flags:FBSDKGraphRequestFlagDisableErrorRecovery
+                                                      useAlternativeDefaultDomainPrefix:originalRequest.useAlternativeDefaultDomainPrefix
                                                           graphRequestConnectionFactory:self.class.graphRequestConnectionFactory];
       FBSDKGraphRequestMetadata *retryMetadata = [[FBSDKGraphRequestMetadata alloc] initWithRequest:retryRequest completionHandler:self.recoveringRequestMetadata.completionHandler batchParameters:self.recoveringRequestMetadata.batchParameters];
       [retryRequest startWithCompletion:^(id<FBSDKGraphRequestConnecting> potentialConnection, id result, NSError *retriedError) {
@@ -1398,7 +1403,7 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 
 // MARK: - Testability
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 /// Resets the default connection timeout to 60 seconds
 + (void)resetDefaultConnectionTimeout
@@ -1409,6 +1414,11 @@ static Class<FBSDKAuthenticationTokenProviding> _authenticationTokenProvider;
 + (void)resetCanMakeRequests
 {
   _canMakeRequests = NO;
+}
+
++ (void)resetDidFetchDomainConfiguration
+{
+  _didFetchDomainConfiguration = NO;
 }
 
 #endif

@@ -7,13 +7,12 @@
  */
 
 #import "FBSDKInternalUtility+Internal.h"
+#import "FBSDKDomainHandler.h"
 
-#import <FBSDKCoreKit/FBSDKCoreKit.h>
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <mach-o/dyld.h>
 #import <sys/time.h>
-
-#import "FBSDKSettings+Internal.h"
 
 typedef NS_ENUM(NSUInteger, FBSDKInternalUtilityVersionMask) {
   FBSDKInternalUtilityMajorVersionMask = 0xFFFF0000,
@@ -49,8 +48,7 @@ static dispatch_once_t fetchUrlSchemesToken;
 
 static BOOL ShouldOverrideHostWithGamingDomain(NSString *hostPrefix)
 {
-  return [FBSDKAuthenticationToken.currentAuthenticationToken respondsToSelector:@selector(graphDomain)]
-  && [FBSDKAuthenticationToken.currentAuthenticationToken.graphDomain isEqualToString:@"gaming"]
+  return [FBSDKDomainHandler isAuthenticatedForGamingDomain]
   && ([hostPrefix isEqualToString:@"graph."] || [hostPrefix isEqualToString:@"graph-video."]);
 }
 
@@ -323,21 +321,30 @@ static FBSDKInternalUtility *_shared;
     }
   }
 
-  NSURL *const URL = [NSURL URLWithString:[NSString stringWithFormat:
-                                           @"%@://%@%@%@",
-                                           scheme ?: @"",
-                                           host ?: @"",
-                                           path ?: @"",
-                                           queryString ?: @""]];
+  NSString *urlString = [NSString stringWithFormat:
+                         @"%@://%@%@%@",
+                         scheme ?: @"",
+                         host ?: @"",
+                         path ?: @"",
+                         queryString ?: @""];
+  
+  NSURL *url = [NSURL URLWithString:urlString];
+
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 170000
+  if (@available(iOS 17.0, *)) {
+    url = [NSURL URLWithString:urlString encodingInvalidCharacters:NO];
+  }
+#endif
+
   if (errorRef != NULL) {
-    if (URL) {
+    if (url) {
       *errorRef = nil;
     } else {
       *errorRef = [self.errorFactory unknownErrorWithMessage:@"Unknown error building URL."
                                                     userInfo:nil];
     }
   }
-  return URL;
+  return url;
 }
 
 - (void)deleteFacebookCookies
@@ -482,23 +489,47 @@ static NSMapTable *_transientObjects;
   }
 }
 
+- (void)detectFatalTrackingDomainsConfig
+{
+  NSArray *subdirectories = @[[NSNull null],
+                               @"Frameworks/FBSDKCoreKit.framework",
+                               @"Frameworks/FBSDKCoreKit_Basics.framework",
+                               @"Frameworks/FBAEMKit.framework",
+                               @"Frameworks/FBSDKLoginKit.framework",
+                               @"Frameworks/FBSDKShareKit.framework"];
+  for (NSString *subdirectory in subdirectories) {
+    NSString *subdir = [subdirectory isKindOfClass:[NSNull class]] ? nil: subdirectory;
+    NSArray<NSURL *> *privacyInfoUrls = [[NSBundle mainBundle] URLsForResourcesWithExtension:@"xcprivacy" subdirectory:subdir];
+    for (NSURL *privacyInfoUrl in privacyInfoUrls) {
+      NSDictionary *privacyInfo = [[NSDictionary alloc] initWithContentsOfURL:privacyInfoUrl];
+      NSArray *trackingDomains = privacyInfo[@"NSPrivacyTrackingDomains"];
+      for (NSString *domain in trackingDomains) {
+        if ([@"facebook.com" isEqualToString:domain]) {
+          NSString *reason = [NSString stringWithFormat:@"Configuring facebook.com as tracking domain could block all subdomains of facebook.com. Please ensure tracking domains are configured correctly in Privacy Manifest file."];
+          @throw [NSException exceptionWithName:@"InvalidOperationException" reason:reason userInfo:nil];
+        }
+      }
+    }
+  }
+}
+
 - (void)extendDictionaryWithDataProcessingOptions:(NSMutableDictionary<NSString *, id> *)parameters
 {
   NSDictionary<NSString *, id> *dataProcessingOptions = self.settings.persistableDataProcessingOptions;
   if (dataProcessingOptions) {
-    NSArray<NSString *> *options = (NSArray<NSString *> *)dataProcessingOptions[DATA_PROCESSING_OPTIONS];
+    NSArray<NSString *> *options = (NSArray<NSString *> *)dataProcessingOptions[FBSDKDataProcessingOptionKeyOptions];
     if (options && [options isKindOfClass:NSArray.class]) {
       NSString *optionsString = [FBSDKBasicUtility JSONStringForObject:options error:nil invalidObjectHandler:nil];
       [FBSDKTypeUtility dictionary:parameters
                          setObject:optionsString
-                            forKey:DATA_PROCESSING_OPTIONS];
+                            forKey:FBSDKDataProcessingOptionKeyOptions];
     }
     [FBSDKTypeUtility dictionary:parameters
-                       setObject:dataProcessingOptions[DATA_PROCESSING_OPTIONS_COUNTRY]
-                          forKey:DATA_PROCESSING_OPTIONS_COUNTRY];
+                       setObject:dataProcessingOptions[FBSDKDataProcessingOptionKeyCountry]
+                          forKey:FBSDKDataProcessingOptionKeyCountry];
     [FBSDKTypeUtility dictionary:parameters
-                       setObject:dataProcessingOptions[DATA_PROCESSING_OPTIONS_STATE]
-                          forKey:DATA_PROCESSING_OPTIONS_STATE];
+                       setObject:dataProcessingOptions[FBSDKDataProcessingOptionKeyState]
+                          forKey:FBSDKDataProcessingOptionKeyState];
   }
 }
 
@@ -521,7 +552,7 @@ static NSMapTable *_transientObjects;
   }
 
   // Find active key window from UIScene
-  if (@available(iOS 13.0, tvOS 13, *)) {
+  if (@available(iOS 13.0, *)) {
     NSSet<UIScene *> *scenes = [UIApplication.sharedApplication valueForKey:@"connectedScenes"];
     for (UIScene *scene in scenes) {
       id activationState = [scene valueForKeyPath:@"activationState"];
@@ -600,7 +631,7 @@ static NSMapTable *_transientObjects;
 
   static NSArray<NSDictionary<NSString *, id> *> *urlTypes = nil;
   dispatch_once(&fetchUrlSchemesToken, ^{
-    urlTypes = [self.infoDictionaryProvider.infoDictionary valueForKey:@"CFBundleURLTypes"];
+    urlTypes = [self.infoDictionaryProvider.fb_infoDictionary valueForKey:@"CFBundleURLTypes"];
   });
   for (NSDictionary<NSString *, id> *urlType in urlTypes) {
     NSArray<NSString *> *urlSchemes = [urlType valueForKey:@"CFBundleURLSchemes"];
@@ -637,7 +668,7 @@ static NSMapTable *_transientObjects;
 {
   static NSArray<NSString *> *schemes = nil;
   dispatch_once(&fetchApplicationQuerySchemesToken, ^{
-    schemes = [self.infoDictionaryProvider.infoDictionary valueForKey:@"LSApplicationQueriesSchemes"];
+    schemes = [self.infoDictionaryProvider.fb_infoDictionary valueForKey:@"LSApplicationQueriesSchemes"];
   });
 
   return [schemes containsObject:urlScheme];
@@ -676,7 +707,7 @@ static NSMapTable *_transientObjects;
 
 #pragma mark - Testability
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 + (void)reset
 {

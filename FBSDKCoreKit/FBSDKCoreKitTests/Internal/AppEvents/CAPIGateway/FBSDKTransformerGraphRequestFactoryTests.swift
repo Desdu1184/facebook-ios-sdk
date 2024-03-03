@@ -10,7 +10,7 @@
 import TestTools
 import XCTest
 
-class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
+final class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
 
   enum Keys {
     static let eventName = "event_name"
@@ -25,8 +25,6 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
-
-    FBSDKTransformerGraphRequestFactory.shared.credentials = nil
     FBSDKTransformerGraphRequestFactory.shared.transformedEvents = []
   }
 
@@ -52,6 +50,21 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
       Values.cloudbridgeURL,
       "Credential's cloudbridge url is not expected"
     )
+  }
+
+  func testCapiGatewayRequestDictionary() throws {
+    FBSDKTransformerGraphRequestFactory.shared.configure(
+      datasetID: Values.datasetID,
+      url: Values.cloudbridgeURL,
+      accessKey: Values.accessKey
+    )
+
+    let event = [["_eventName": "fb_mobile_add_to_cart"]] as [[String: String]]
+
+    let dictionary = FBSDKTransformerGraphRequestFactory.shared.capiGatewayRequestDictionary(with: event)
+
+    XCTAssertEqual(dictionary["accessKey"] as? String, "key123")
+    XCTAssertEqual(dictionary["data"] as? [[String: String]], event)
   }
 
   func testErrorHandlingWithServerError() throws {
@@ -81,7 +94,7 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
 
   func testErrorHandlingWithoutServerError() throws {
     let url = try XCTUnwrap(URL(string: "graph.facebook.com"))
-    let response = HTTPURLResponse(url: url, statusCode: 503, httpVersion: "HTTP/1.1", headerFields: nil)
+    var response = HTTPURLResponse(url: url, statusCode: 503, httpVersion: "HTTP/1.1", headerFields: nil)
 
     FBSDKTransformerGraphRequestFactory.shared.transformedEvents = [[Keys.eventName: "purchase"]]
     FBSDKTransformerGraphRequestFactory.shared.handleError(
@@ -91,11 +104,29 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
     XCTAssertEqual(
       FBSDKTransformerGraphRequestFactory.shared.transformedEvents.count,
       2,
-      "Should re-append the events to the cache queue if the request fails for connecty issue"
+      "Should re-append the event to the cache queue if the request fails due to 503 error"
     )
     XCTAssertEqual(
       FBSDKTransformerGraphRequestFactory.shared.transformedEvents.first as? [String: String],
       [Keys.eventName: Values.testEvent],
+      "The appended event is not expected"
+    )
+
+    response = HTTPURLResponse(url: url, statusCode: 429, httpVersion: "HTTP/1.1", headerFields: nil)
+
+    FBSDKTransformerGraphRequestFactory.shared.handleError(
+      response: response,
+      events: [[Keys.eventName: "addToCart"]]
+    )
+    XCTAssertEqual(
+      FBSDKTransformerGraphRequestFactory.shared.transformedEvents.count,
+      3,
+      "Should re-append the event to the cache queue if the request fails due to 429 error"
+    )
+
+    XCTAssertEqual(
+      FBSDKTransformerGraphRequestFactory.shared.transformedEvents.first as? [String: String],
+      [Keys.eventName: "addToCart"],
       "The appended event is not expected"
     )
   }
@@ -103,11 +134,11 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
   func testAppendEventsOverLimits() {
     let event = [Keys.eventName: Values.testEvent]
     var events: [[String: Any]] = []
-    for _ in 0..<100 {
+    for _ in 0 ..< 100 {
       events.append(event)
     }
 
-    for _ in 0..<990 {
+    for _ in 0 ..< 990 {
       FBSDKTransformerGraphRequestFactory.shared.transformedEvents.append(event)
     }
 
@@ -123,11 +154,11 @@ class FBSDKTransformerGraphRequestFactoryTests: XCTestCase {
     let event = [Keys.eventName: Values.testEvent]
     var events: [[String: Any]] = []
 
-    for _ in 0..<100 {
+    for _ in 0 ..< 100 {
       events.append(event)
     }
 
-    for _ in 0..<10 {
+    for _ in 0 ..< 10 {
       FBSDKTransformerGraphRequestFactory.shared.transformedEvents.append(event)
     }
 

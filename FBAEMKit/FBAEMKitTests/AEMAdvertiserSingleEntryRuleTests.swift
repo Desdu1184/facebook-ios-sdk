@@ -8,9 +8,8 @@
 
 @testable import FBAEMKit
 
+import TestTools
 import XCTest
-
-#if !os(tvOS)
 
 final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
@@ -24,7 +23,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithEventParameters() {
     var rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+      operator: .contains,
       paramKey: "fb_content.title",
       linguisticCondition: "hello",
       numericalCondition: nil,
@@ -51,7 +50,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Should not expect the event parameter matched with the rule"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorNotEqual)
+    rule.operator = .notEqual
     XCTAssertTrue(
       rule.isMatchedEventParameters(["fb_content": ["title": "helloworld"]]),
       "Should expect the event parameter matched with the rule"
@@ -62,14 +61,14 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
     )
 
     rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorGreaterThan,
+      operator: .greaterThan,
       paramKey: "fb_content.product1.quantity",
       linguisticCondition: nil,
-      numericalCondition: NSNumber(value: 10),
+      numericalCondition: 10,
       arrayCondition: nil
     )
     XCTAssertTrue(
-      rule.isMatchedEventParameters(["fb_content": ["product1": ["quantity": 100]]]),
+      rule.isMatchedEventParameters(["fb_content": ["product1": ["quantity": 100.0]]]),
       "Should expect the event parameter matched with the rule"
     )
     XCTAssertFalse(
@@ -80,7 +79,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithEventParametersForAsteriskOperator() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+      operator: .contains,
       paramKey: "fb_content[*].id",
       linguisticCondition: "coffee",
       numericalCondition: nil,
@@ -103,7 +102,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithEventParametersAndAsterisk() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+      operator: .contains,
       paramKey: "fb_content[*].title",
       linguisticCondition: "hello",
       numericalCondition: nil,
@@ -129,7 +128,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithAsteriskParam() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+      operator: .contains,
       paramKey: "fb_content[*].title",
       linguisticCondition: "hello",
       numericalCondition: nil,
@@ -172,7 +171,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithStringComparision() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorContains,
+      operator: .contains,
       paramKey: "fb_content.title",
       linguisticCondition: "hello",
       numericalCondition: nil,
@@ -187,7 +186,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorNotContains)
+    rule.operator = .notContains
     XCTAssertFalse(
       rule.isMatched(withStringValue: "worldhelloworld", numericalValue: nil),
       "Shoule not expect parameter matched with the value"
@@ -201,7 +200,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorStartsWith)
+    rule.operator = .startsWith
     XCTAssertTrue(
       rule.isMatched(withStringValue: "helloworld", numericalValue: nil),
       "Shoule expect parameter matched with the value"
@@ -215,7 +214,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorI_Contains)
+    rule.operator = .caseInsensitiveContains
     XCTAssertTrue(
       rule.isMatched(withStringValue: "worldHELLOworld", numericalValue: nil),
       "Shoule expect parameter matched with the value"
@@ -225,7 +224,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorI_NotContains)
+    rule.operator = .caseInsensitiveNotContains
     XCTAssertFalse(
       rule.isMatched(withStringValue: "worldHELLOworld", numericalValue: nil),
       "Shoule not expect parameter matched with the value"
@@ -235,7 +234,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorI_StartsWith)
+    rule.operator = .caseInsensitiveStartsWith
     XCTAssertTrue(
       rule.isMatched(withStringValue: "HELLOworld", numericalValue: nil),
       "Shoule expect parameter matched with the value"
@@ -245,7 +244,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorEqual)
+    rule.operator = .equal
     XCTAssertTrue(
       rule.isMatched(withStringValue: "hello", numericalValue: nil),
       "Shoule expect parameter matched with the value"
@@ -259,7 +258,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with the value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorNotEqual)
+    rule.operator = .notEqual
     XCTAssertFalse(
       rule.isMatched(withStringValue: "hello", numericalValue: nil),
       "Shoule not expect parameter matched with the value"
@@ -276,71 +275,71 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsMatchedWithNumberComparision() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorLessThan,
+      operator: .lessThan,
       paramKey: "fb_content.title",
       linguisticCondition: nil,
-      numericalCondition: NSNumber(value: 100),
+      numericalCondition: 100,
       arrayCondition: nil
     )
     XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 90)),
+      rule.isMatched(withStringValue: nil, numericalValue: 90),
       "Shoule expect parameter matched with value"
     )
     XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 100)),
+      rule.isMatched(withStringValue: nil, numericalValue: 100),
       "Shoule not expect parameter matched with value"
     )
     XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 101)),
-      "Shoule not expect parameter matched with value"
-    )
-
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorLessThanOrEqual)
-    XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 99)),
-      "Shoule expect parameter matched with value"
-    )
-    XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 100)),
-      "Shoule expect parameter matched with value"
-    )
-    XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 100.1)),
+      rule.isMatched(withStringValue: nil, numericalValue: 101),
       "Shoule not expect parameter matched with value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorGreaterThan)
+    rule.operator = .lessThanOrEqual
     XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 101.5)),
+      rule.isMatched(withStringValue: nil, numericalValue: 99),
+      "Shoule expect parameter matched with value"
+    )
+    XCTAssertTrue(
+      rule.isMatched(withStringValue: nil, numericalValue: 100),
       "Shoule expect parameter matched with value"
     )
     XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 100)),
-      "Shoule not expect parameter matched with value"
-    )
-    XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 99)),
+      rule.isMatched(withStringValue: nil, numericalValue: 100.1),
       "Shoule not expect parameter matched with value"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorGreaterThanOrEqual)
+    rule.operator = .greaterThan
     XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 101.5)),
-      "Shoule expect parameter matched with value"
-    )
-    XCTAssertTrue(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 100)),
+      rule.isMatched(withStringValue: nil, numericalValue: 101.5),
       "Shoule expect parameter matched with value"
     )
     XCTAssertFalse(
-      rule.isMatched(withStringValue: nil, numericalValue: NSNumber(value: 99)),
+      rule.isMatched(withStringValue: nil, numericalValue: 100),
+      "Shoule not expect parameter matched with value"
+    )
+    XCTAssertFalse(
+      rule.isMatched(withStringValue: nil, numericalValue: 99),
+      "Shoule not expect parameter matched with value"
+    )
+
+    rule.operator = .greaterThanOrEqual
+    XCTAssertTrue(
+      rule.isMatched(withStringValue: nil, numericalValue: 101.5),
+      "Shoule expect parameter matched with value"
+    )
+    XCTAssertTrue(
+      rule.isMatched(withStringValue: nil, numericalValue: 100),
+      "Shoule expect parameter matched with value"
+    )
+    XCTAssertFalse(
+      rule.isMatched(withStringValue: nil, numericalValue: 99),
       "Shoule not expect parameter matched with value"
     )
   }
 
   func testIsMatchedWithArrayComparision() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+      operator: .isAny,
       paramKey: "fb_content.title",
       linguisticCondition: nil,
       numericalCondition: nil,
@@ -355,19 +354,19 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
       "Shoule not expect parameter matched with item in the array"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorI_IsAny)
+    rule.operator = .caseInsensitiveIsAny
     XCTAssertTrue(
       rule.isMatched(withStringValue: "abc", numericalValue: nil),
       "Shoule expect parameter matched with item in the array"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsNotAny)
+    rule.operator = .isNotAny
     XCTAssertTrue(
       rule.isMatched(withStringValue: "xxxx", numericalValue: nil),
       "Shoule expect parameter matched with item in the array"
     )
 
-    rule.setOperator(AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorI_IsNotAny)
+    rule.operator = .caseInsensitiveIsNotAny
     XCTAssertTrue(
       rule.isMatched(withStringValue: "ab", numericalValue: nil),
       "Shoule expect parameter matched with item in the array"
@@ -376,7 +375,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsRegexMatch() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+      operator: .isAny,
       paramKey: "fb_content.title",
       linguisticCondition: "eylea.us/support/?$|eylea.us/support/?",
       numericalCondition: nil,
@@ -394,7 +393,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsRegexMatchWithEmtpyString() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+      operator: .isAny,
       paramKey: "fb_content.title",
       linguisticCondition: "",
       numericalCondition: nil,
@@ -408,7 +407,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsRegexMatchWithNullableString() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+      operator: .isAny,
       paramKey: "fb_content.title",
       linguisticCondition: nil,
       numericalCondition: nil,
@@ -422,7 +421,7 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
 
   func testIsAnyOf() {
     let rule = AEMAdvertiserSingleEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorIsAny,
+      operator: .isAny,
       paramKey: "fb_content.title",
       linguisticCondition: nil,
       numericalCondition: nil,
@@ -457,67 +456,33 @@ final class AEMAdvertiserSingleEntryRuleTests: XCTestCase {
     )
   }
 
-  func testEncoding() throws {
-    let coder = TestCoder()
+  func testEncodingAndDecoding() throws {
     let entryRule = SampleAEMData.validAdvertiserSingleEntryRule
-    entryRule.encode(with: coder)
+    let decodedObject = try CodabilityTesting.encodeAndDecode(entryRule)
 
-    let ruleOperator = coder.encodedObject[Keys.ruleOperator] as? NSNumber
+    // Test Objects
+    XCTAssertNotIdentical(entryRule, decodedObject, .isCodable)
+    XCTAssertEqual(entryRule, decodedObject, .isCodable)
+
+    // Test Properties
+    XCTAssertEqual(entryRule.operator.rawValue, decodedObject.operator.rawValue, .isCodable)
+    XCTAssertEqual(entryRule.paramKey, decodedObject.paramKey, .isCodable)
     XCTAssertEqual(
-      ruleOperator?.intValue,
-      entryRule.operator.rawValue,
-      "Should encode the expected operator with the correct key"
-    )
-    XCTAssertEqual(
-      coder.encodedObject[Keys.ruleParamKey] as? String,
-      entryRule.paramKey,
-      "Should encode the expected param_key with the correct key"
-    )
-    XCTAssertEqual(
-      coder.encodedObject[Keys.ruleStringValue] as? String,
       entryRule.linguisticCondition,
-      "Should encode the expected string_value with the correct key"
+      decodedObject.linguisticCondition,
+      .isCodable
     )
-    let numberValue = try XCTUnwrap(coder.encodedObject[Keys.ruleNumberValue] as? NSNumber)
-    XCTAssertTrue(
-      entryRule.numericalCondition?.isEqual(to: numberValue) == true,
-      "Should encode the expected content with the correct key"
-    )
-    let arrayValue = try XCTUnwrap(coder.encodedObject[Keys.ruleArrayValue] as? NSArray)
-    let expectedArrayValue = try XCTUnwrap(entryRule.arrayCondition as NSArray?)
     XCTAssertEqual(
-      arrayValue,
-      expectedArrayValue,
-      "Should encode the expected array_value with the correct key"
+      entryRule.numericalCondition,
+      decodedObject.numericalCondition,
+      .isCodable
     )
-  }
-
-  func testDecoding() {
-    let decoder = TestCoder()
-    _ = AEMAdvertiserSingleEntryRule(coder: decoder)
-
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.ruleOperator] as? String,
-      "decodeIntegerForKey",
-      "Should decode the expected type for the operator key"
-    )
-    XCTAssertTrue(
-      decoder.decodedObject[Keys.ruleParamKey] is NSString.Type,
-      "Should decode the expected type for the param_key key"
-    )
-    XCTAssertTrue(
-      decoder.decodedObject[Keys.ruleStringValue] is NSString.Type,
-      "Should decode the expected type for the string_value key"
-    )
-    XCTAssertTrue(
-      decoder.decodedObject[Keys.ruleNumberValue] is NSNumber.Type,
-      "Should decode the expected type for the number_value key"
-    )
-    XCTAssertTrue(
-      decoder.decodedObject[Keys.ruleArrayValue] is NSArray.Type,
-      "Should decode the expected type for the array_value key"
-    )
+    XCTAssertEqual(entryRule.arrayCondition, decodedObject.arrayCondition, .isCodable)
   }
 }
 
-#endif
+// MARK: - Assumptions
+
+extension String {
+  fileprivate static let isCodable = "AEMAdvertiserSingleEntryRule should be encodable and decodable"
+}

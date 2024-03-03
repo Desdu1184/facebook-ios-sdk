@@ -8,6 +8,8 @@
 
 @testable import FBSDKCoreKit
 
+import AppTrackingTransparency
+import TestTools
 import XCTest
 
 final class SettingsTests: XCTestCase {
@@ -15,6 +17,7 @@ final class SettingsTests: XCTestCase {
   // swiftlint:disable implicitly_unwrapped_optional
   var logger: TestEventLogger!
   var appEventsConfigurationProvider: TestAppEventsConfigurationProvider!
+  var serverConfigurationProvider: TestAppEventsServerConfigurationProvider!
   var userDefaultsSpy: UserDefaultsSpy!
   var settings: Settings!
   var bundle: InfoDictionaryProviding!
@@ -34,10 +37,12 @@ final class SettingsTests: XCTestCase {
 
     logger = TestEventLogger()
     appEventsConfigurationProvider = TestAppEventsConfigurationProvider()
+    serverConfigurationProvider = TestAppEventsServerConfigurationProvider()
     userDefaultsSpy = UserDefaultsSpy()
     bundle = TestBundle()
     settings = Settings()
     configureSettings()
+    DomainHandlerTests.configureDomainHandlerForTesting()
   }
 
   override func tearDown() {
@@ -51,77 +56,57 @@ final class SettingsTests: XCTestCase {
   }
 
   private func configureSettings() {
-    settings.configure(
-      store: userDefaultsSpy,
-      appEventsConfigurationProvider: appEventsConfigurationProvider,
-      infoDictionaryProvider: bundle,
-      eventLogger: logger
+    settings.setDependencies(
+      .init(
+        appEventsConfigurationProvider: appEventsConfigurationProvider,
+        serverConfigurationProvider: serverConfigurationProvider,
+        dataStore: userDefaultsSpy,
+        eventLogger: logger,
+        infoDictionaryProvider: bundle
+      )
     )
   }
 
-  func testDefaultUserDefaultsSpy() {
-    settings.reset()
-    XCTAssertNil(
-      settings.store,
-      "Settings should not have a default data userDefaultsSpy"
+  func testDefaultDependencies() {
+    settings.resetDependencies()
+    XCTAssertThrowsError(
+      _ = try settings.getDependencies(),
+      "Settings instances should not have any default dependencies"
     )
   }
 
-  func testConfiguringWithUserDefaultsSpy() {
-    XCTAssertTrue(
-      settings.store === userDefaultsSpy,
-      "Should be able to set a persistent data userDefaultsSpy"
-    )
-  }
+  func testCustomDependencies() throws {
+    let dependencies = try settings.getDependencies()
 
-  func testDefaultAppEventsConfigurationProvider() {
-    settings.reset()
-    XCTAssertNil(
-      settings.appEventsConfigurationProvider,
-      "Settings should not have a default app events configuration provider"
+    XCTAssertIdentical(
+      dependencies.dataStore,
+      userDefaultsSpy,
+      "Should be able to configure a data store dependency"
     )
-  }
-
-  func testConfiguringWithAppEventsConfigurationProvider() {
-    XCTAssertTrue(
-      settings.appEventsConfigurationProvider === appEventsConfigurationProvider,
-      "Should be able to set an app events configuration provider"
+    XCTAssertIdentical(
+      dependencies.appEventsConfigurationProvider,
+      appEventsConfigurationProvider,
+      "Should be able to configure an app events configuration provider dependency"
     )
-  }
-
-  func testDefaultInfoDictionaryProvider() {
-    settings.reset()
-    XCTAssertNil(
-      settings.infoDictionaryProvider,
-      "Settings should not have a default info dictionary provider"
+    XCTAssertIdentical(
+      dependencies.infoDictionaryProvider,
+      bundle,
+      "Should be able to configure an info dictionary provider dependency"
     )
-  }
-
-  func testConfiguringWithInfoDictionaryProvider() {
-    XCTAssertTrue(
-      settings.infoDictionaryProvider === bundle,
-      "Should be able to set an info dictionary provider"
-    )
-  }
-
-  func testDefaultEventLogger() {
-    settings.reset()
-    XCTAssertNil(
-      settings.eventLogger,
-      "Settings should not have a default event logger"
-    )
-  }
-
-  func testConfiguringWithEventLogger() {
-    XCTAssertTrue(
-      settings.eventLogger === logger,
-      "Should be able to set an event logger"
+    XCTAssertIdentical(
+      dependencies.eventLogger,
+      logger,
+      "Should be able to configure an event logger dependency"
     )
   }
 
   // MARK: Advertiser Tracking Status
 
   func testFacebookAdvertiserTrackingStatusDefaultValue() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     let configuration = TestAppEventsConfiguration(defaultATEStatus: .disallowed)
     appEventsConfigurationProvider.stubbedConfiguration = configuration
 
@@ -148,7 +133,11 @@ final class SettingsTests: XCTestCase {
   }
 
   func testGettingExplicitlySetFacebookAdvertiserTrackingStatus() {
-    settings.setAdvertiserTrackingStatus(.disallowed)
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
+    settings.advertisingTrackingStatus = .disallowed
     XCTAssertEqual(
       settings.advertisingTrackingStatus,
       .disallowed,
@@ -165,6 +154,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testGettingPersistedFacebookAdvertiserTrackingStatus() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     let key = "com.facebook.sdk:FBSDKSettingsAdvertisingTrackingStatus"
     userDefaultsSpy.set(
       NSNumber(value: AdvertisingTrackingStatus.allowed.rawValue),
@@ -187,6 +180,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testGettingCachedFacebookAdvertiserTrackingStatus() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     let key = "com.facebook.sdk:FBSDKSettingsAdvertisingTrackingStatus"
     userDefaultsSpy.set(
       NSNumber(value: AdvertisingTrackingStatus.allowed.rawValue),
@@ -209,6 +206,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingFacebookAdvertiserTrackingStatusToEnabled() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     settings.isAdvertiserTrackingEnabled = true
     XCTAssertEqual(
       userDefaultsSpy.capturedSetObjectKey,
@@ -218,6 +219,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingFacebookAdvertiserTrackingStatusToDisallowed() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     settings.isAdvertiserTrackingEnabled = false
     XCTAssertEqual(
       userDefaultsSpy.capturedSetObjectKey,
@@ -227,6 +232,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingFacebookAdvertiserTrackingStatusToEnabledProperty() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     settings.isAdvertiserTrackingEnabled = true
 
     XCTAssertTrue(
@@ -241,6 +250,10 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingFacebookAdvertiserTrackingStatusToDisallowedProperty() {
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
     settings.isAdvertiserTrackingEnabled = false
 
     XCTAssertFalse(
@@ -255,12 +268,42 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingFacebookAdvertiserTrackingStatusToUnspecified() {
-    settings.setAdvertiserTrackingStatus(.unspecified)
+    if _DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+
+    settings.advertisingTrackingStatus = .unspecified
 
     XCTAssertNil(
       userDefaultsSpy.object(forKey: "com.facebook.sdk:FBSDKSettingsSetAdvertiserTrackingEnabledTimestamp"),
       "Should not capture the time the status is set to unspecified"
     )
+  }
+
+  func testAdvertiserTrackingStatusWithDomainHandlingEnabled() {
+    if !_DomainHandler.sharedInstance().isDomainHandlingEnabled() {
+      return
+    }
+    if #available(iOS 14, *) {
+      let status: ATTrackingManager.AuthorizationStatus = ATTrackingManager.trackingAuthorizationStatus
+      switch status {
+      case .notDetermined:
+        XCTAssertTrue(settings.advertisingTrackingStatus == .unspecified)
+        XCTAssertFalse(settings.isAdvertiserTrackingEnabled)
+      case .restricted:
+        XCTAssertTrue(settings.advertisingTrackingStatus == .disallowed)
+        XCTAssertFalse(settings.isAdvertiserTrackingEnabled)
+      case .denied:
+        XCTAssertTrue(settings.advertisingTrackingStatus == .disallowed)
+        XCTAssertFalse(settings.isAdvertiserTrackingEnabled)
+      case .authorized:
+        XCTAssertTrue(settings.advertisingTrackingStatus == .allowed)
+        XCTAssertTrue(settings.isAdvertiserTrackingEnabled)
+      @unknown default:
+        XCTAssertTrue(settings.advertisingTrackingStatus == .unspecified)
+        XCTAssertFalse(settings.isAdvertiserTrackingEnabled)
+      }
+    }
   }
 
   // MARK: - Logging behaviors
@@ -282,7 +325,7 @@ final class SettingsTests: XCTestCase {
     let mockLoggingBehaviors = Set([appEvents, networkRequests])
     let informationBehaviort = LoggingBehavior(rawValue: "informational")
 
-    settings.setLoggingBehaviors(mockLoggingBehaviors)
+    settings.loggingBehaviors = mockLoggingBehaviors
 
     XCTAssertEqual(mockLoggingBehaviors, settings.loggingBehaviors)
 
@@ -1005,6 +1048,20 @@ final class SettingsTests: XCTestCase {
 
   // MARK: - Auto Log App Events Enabled
 
+  func testAutoLogAppEventsEnabledFromKeyPath() {
+    configureSettings()
+    settings.isAutoLogAppEventsEnabled = false
+    XCTAssertFalse(
+      settings.isAutoLogAppEventsEnabled,
+      "Auto logging should pick up the correct value from KeyPath"
+    )
+    settings.isAutoLogAppEventsEnabled = true
+    XCTAssertTrue(
+      settings.isAutoLogAppEventsEnabled,
+      "Auto logging should pick up the correct value from KeyPath when value changed"
+    )
+  }
+
   func testAutoLogAppEventsEnabledFromPlist() {
     bundle = TestBundle(infoDictionary: ["FacebookAutoLogAppEventsEnabled": false])
     configureSettings()
@@ -1026,9 +1083,9 @@ final class SettingsTests: XCTestCase {
     bundle = TestBundle(infoDictionary: ["FacebookAutoLogAppEventsEnabled": Self.emptyString])
     configureSettings()
 
-    XCTAssertFalse(
+    XCTAssertTrue(
       settings.isAutoLogAppEventsEnabled,
-      "Auto logging of app events should default to true when there is an invalid plist value given but it does not"
+      "Auto logging of app events should default to true when there is an invalid plist value given"
     )
   }
 
@@ -1073,6 +1130,82 @@ final class SettingsTests: XCTestCase {
     )
   }
 
+  func testAutoLogAppEventsEnabledFromServer_1() {
+    // set true for the server-side overriden value
+    let migratedAutoLogValues = ["auto_log_app_events_enabled": NSNumber(true)]
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": migratedAutoLogValues]
+    // set false in info.plist
+    bundle = TestBundle(infoDictionary: ["FacebookAutoLogAppEventsEnabled": false])
+    configureSettings()
+    XCTAssertTrue(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the server-side overriden value over others"
+    )
+  }
+
+  func testAutoLogAppEventsEnabledFromServer_2() {
+    // set true for the server-side overriden value
+    let migratedAutoLogValues = ["auto_log_app_events_enabled": String("Some_Value")]
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": migratedAutoLogValues]
+    configureSettings()
+    settings.isAutoLogAppEventsEnabled = true
+    XCTAssertTrue(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the client-side value when type casting fails"
+    )
+  }
+
+  func testAutoLogAppEventsEnabledFromServerDefault() {
+    // set false for the server-side default value
+    let migratedAutoLogValues = ["auto_log_app_events_default": NSNumber(false)]
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": migratedAutoLogValues]
+    configureSettings()
+    XCTAssertFalse(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the server-side default value if there are no other values set"
+    )
+  }
+
+  func testAutoLogAppEventsEnabledFromLocal_1() {
+    // set true for the server-side default value
+    let migratedAutoLogValues = ["auto_log_app_events_default": NSNumber(true)]
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": migratedAutoLogValues]
+    // set false in info.plist
+    bundle = TestBundle(infoDictionary: ["FacebookAutoLogAppEventsEnabled": false])
+    configureSettings()
+    XCTAssertFalse(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the value in info.plist over the server-side default value"
+    )
+  }
+
+  func testAutoLogAppEventsEnabledFromLocal_2() {
+    // set true for the server-side overriden value
+    let migratedAutoLogValues = ["auto_log_app_events_default": NSNumber(true)]
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": migratedAutoLogValues]
+    // set false in memory store
+    configureSettings()
+    settings.isAutoLogAppEventsEnabled = false
+    configureSettings()
+    XCTAssertFalse(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the value in memory over the server-side default value"
+    )
+  }
+
+  func testAutoLogAppEventsEnabledFromLocal_3() {
+    // Set an empty dictionary for the server-side value
+    // Technically, this should not happen in production environment
+    serverConfigurationProvider.configs = ["migratedAutoLogValues": [:]]
+    // set false in user default
+    configureSettings()
+    settings.dataStore?.fb_setObject(false, forKey: "FacebookAutoLogAppEventsEnabled")
+    XCTAssertFalse(
+      settings.isAutoLogAppEventsEnabled,
+      "Should favor the value in user default over the server-side default value"
+    )
+  }
+
   // MARK: - Advertiser Identifier Collection Enabled
 
   func testFacebookAdvertiserIDCollectionEnabled() {
@@ -1096,10 +1229,10 @@ final class SettingsTests: XCTestCase {
     bundle = TestBundle(infoDictionary: ["FacebookAdvertiserIDCollectionEnabled": Self.emptyString])
     configureSettings()
 
-    XCTAssertFalse(
+    XCTAssertTrue(
       settings.isAdvertiserIDCollectionEnabled,
       "Auto collection of advertiser Any should default to true when"
-        + "there is an invalid plist value given but it does not"
+        + "there is an invalid plist value given"
     )
   }
 
@@ -1168,9 +1301,9 @@ final class SettingsTests: XCTestCase {
     bundle = TestBundle(infoDictionary: ["FacebookSKAdNetworkReportEnabled": Self.emptyString])
     configureSettings()
 
-    XCTAssertFalse(
+    XCTAssertTrue(
       settings.isSKAdNetworkReportEnabled,
-      "SKAdNetwork Report should default to true when there is an invalid plist value given but it does not"
+      "SKAdNetwork Report should default to true when there is an invalid plist value given"
     )
   }
 
@@ -1470,12 +1603,12 @@ final class SettingsTests: XCTestCase {
     let dataProcessingOptions = settings.persistableDataProcessingOptions
 
     XCTAssertEqual(
-      dataProcessingOptions?[DATA_PROCESSING_OPTIONS_COUNTRY] as! Int, // swiftlint:disable:this force_cast
+      dataProcessingOptions?[DataProcessingOptionKey.country.rawValue] as! Int32, // swiftlint:disable:this force_cast
       0,
       "Country should default to zero when not provided"
     )
     XCTAssertEqual(
-      dataProcessingOptions?[DATA_PROCESSING_OPTIONS_STATE] as! Int, // swiftlint:disable:this force_cast
+      dataProcessingOptions?[DataProcessingOptionKey.state.rawValue] as! Int32, // swiftlint:disable:this force_cast
       0,
       "State should default to zero when not provided"
     )
@@ -1498,7 +1631,10 @@ final class SettingsTests: XCTestCase {
       "Should not be able to set data processing options to invalid list of options but you can"
     )
 
-    let persistedData = NSKeyedArchiver.archivedData(withRootObject: settings.persistableDataProcessingOptions as Any)
+    let persistedData = try NSKeyedArchiver.archivedData(
+      withRootObject: settings.persistableDataProcessingOptions as Any,
+      requiringSecureCoding: true
+    )
 
     let capturedValues = userDefaultsSpy.capturedValues
 
@@ -1521,23 +1657,23 @@ final class SettingsTests: XCTestCase {
   }
 
   func testSettingDataProcessingOptionsWithCountryAndState() {
-    let countryCode = -1000000000
-    let stateCode = 100000000
+    let countryCode: Int32 = -1000000000
+    let stateCode: Int32 = 100000000
 
     settings.setDataProcessingOptions([], country: Int32(countryCode), state: Int32(stateCode))
     let dataProcessingOptions = settings.persistableDataProcessingOptions
     XCTAssertEqual(
-      (settings.persistableDataProcessingOptions?[DATA_PROCESSING_OPTIONS] as? [Any])?.isEmpty,
+      (settings.persistableDataProcessingOptions?[DataProcessingOptionKey.options.rawValue] as? [Any])?.isEmpty,
       true,
       "Should use the provided array of processing options"
     )
     XCTAssertEqual(
-      dataProcessingOptions?[DATA_PROCESSING_OPTIONS_COUNTRY] as? Int,
+      dataProcessingOptions?[DataProcessingOptionKey.country.rawValue] as? Int32,
       countryCode,
       "Should use the provided country code"
     )
     XCTAssertEqual(
-      dataProcessingOptions?[DATA_PROCESSING_OPTIONS_STATE] as? Int,
+      dataProcessingOptions?[DataProcessingOptionKey.state.rawValue] as? Int32,
       stateCode,
       "Should use the provided state code"
     )
@@ -1559,12 +1695,9 @@ final class SettingsTests: XCTestCase {
     )
   }
 
-  func testDataProcessingOptionsWithNonEmptyCache() {
-    settings.setDataProcessingOptions([])
-
-    // Reset internal storage
-    settings.reset()
-    configureSettings()
+  func testDataProcessingOptionsWithNonEmptyCache() throws {
+    let data = try NSKeyedArchiver.archivedData(withRootObject: [:], requiringSecureCoding: false)
+    userDefaultsSpy.fb_setObject(data, forKey: Settings.PersistenceKey.dataProcessingOptions.rawValue)
 
     XCTAssertNotNil(
       settings.persistableDataProcessingOptions,
@@ -1632,25 +1765,10 @@ final class SettingsTests: XCTestCase {
     )
   }
 
-  func testIsEventDelayTimerExpired() {
-    settings.recordInstall()
-    XCTAssertFalse(settings.isEventDelayTimerExpired())
-
-    let today = Date()
-    let calendar = Calendar(identifier: .gregorian)
-    var addComponents = DateComponents()
-    addComponents.month = -1
-    let expiredDate = calendar.date(byAdding: addComponents, to: today, wrappingComponents: false)
-
-    userDefaultsSpy.setValue(expiredDate, forKey: "com.facebook.sdk:FBSDKSettingsInstallTimestamp")
-
-    XCTAssertTrue(settings.isEventDelayTimerExpired())
-  }
-
-  func testIsSetATETimeExceedsInstallTime() {
+  func testIsATETimeSufficientlyDelayed() {
     settings.recordInstall()
     settings.recordSetAdvertiserTrackingEnabled()
-    XCTAssertFalse(settings.isSetATETimeExceedsInstallTime)
+    XCTAssertFalse(settings.isATETimeSufficientlyDelayed)
     settings.recordSetAdvertiserTrackingEnabled()
     let today = Date()
     let calendar = Calendar(identifier: .gregorian)
@@ -1658,7 +1776,7 @@ final class SettingsTests: XCTestCase {
     addComponents.month = -1
     let expiredDate = calendar.date(byAdding: addComponents, to: today, wrappingComponents: false)
     userDefaultsSpy.setValue(expiredDate, forKey: "com.facebook.sdk:FBSDKSettingsInstallTimestamp")
-    XCTAssertTrue(settings.isSetATETimeExceedsInstallTime)
+    XCTAssertTrue(settings.isATETimeSufficientlyDelayed)
   }
 
   // MARK: - test for internal functions

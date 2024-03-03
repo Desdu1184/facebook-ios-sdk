@@ -12,13 +12,13 @@
 
 #import <UIKit/UIKit.h>
 
+#import <FBSDKCoreKit/FBSDKCoreKit.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <objc/runtime.h>
 
 #import "FBSDKCodelessPathComponent.h"
 #import "FBSDKEventBinding.h"
 #import "FBSDKEventLogging.h"
-#import "FBSDKSwizzling.h"
 #import "FBSDKViewHierarchy.h"
 #import "FBSDKViewHierarchyMacros.h"
 
@@ -312,7 +312,7 @@
                                     named:@"handle_table_view"];
           }
         };
-      #if FBTEST
+      #if DEBUG
         tableViewBlock();
       #else
         fb_dispatch_on_default_thread(tableViewBlock);
@@ -342,7 +342,7 @@
                                     named:@"handle_collection_view"];
           }
         };
-      #if FBTEST
+      #if DEBUG
         collectionViewBlock();
       #else
         fb_dispatch_on_default_thread(collectionViewBlock);
@@ -350,7 +350,7 @@
       }
     };
 
-  #if FBTEST
+  #if DEBUG
     matchBlock();
   #else
     fb_dispatch_on_default_thread(matchBlock);
@@ -410,9 +410,8 @@
             }
             targetView = targetView.superview;
           }
-          FBSDKEventBinding *eventBinding = self->_reactBindings[reactTag];
-          if (reactTag != nil && eventBinding != nil) {
-            [eventBinding trackEvent:nil];
+          if (reactTag != nil && self->_reactBindings[reactTag] != nil) {
+            [self->_reactBindings[reactTag] trackEvent:nil];
           }
         }
       }
@@ -467,7 +466,7 @@
   return _validClasses;
 }
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 - (void)setReactBindings:(NSMutableDictionary<NSNumber *, id> *)bindings
 {

@@ -8,32 +8,14 @@
 
 #if !TARGET_OS_TV
 
-#import "FBSDKCodelessIndexer.h"
-
-#import <UIKit/UIKit.h>
-
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <objc/runtime.h>
 #import <sys/sysctl.h>
 #import <sys/utsname.h>
+#import <UIKit/UIKit.h>
 
-#import "FBSDKAdvertiserIDProviding.h"
-#import "FBSDKAppEventsUtility.h"
-#import "FBSDKGraphRequestConnecting.h"
-#import "FBSDKGraphRequestConnectionFactoryProtocol.h"
-#import "FBSDKGraphRequestFactoryProtocol.h"
-#import "FBSDKGraphRequestHTTPMethod.h"
-#import "FBSDKGraphRequestProtocol.h"
 #import "FBSDKInternalUtility+Internal.h"
-#import "FBSDKObjectDecoding.h"
-#import "FBSDKServerConfiguration.h"
-#import "FBSDKServerConfigurationManager.h"
-#import "FBSDKServerConfigurationProviding.h"
-#import "FBSDKSettings+Internal.h"
-#import "FBSDKSettingsProtocol.h"
-#import "FBSDKSwizzling.h"
-#import "FBSDKUnarchiverProvider.h"
-#import "FBSDKUtility.h"
 #import "FBSDKViewHierarchy.h"
 #import "FBSDKViewHierarchyMacros.h"
 
@@ -180,8 +162,6 @@ static id<FBSDKSettings> _settings;
   });
 }
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 // DO NOT call this function, it is only called once in the enable function
 + (void)loadCodelessSettingWithCompletionBlock:(FBSDKCodelessSettingLoadBlock)completionBlock
 {
@@ -197,7 +177,7 @@ static id<FBSDKSettings> _settings;
 
     // load the defaults
     NSString *defaultKey = [NSString stringWithFormat:CODELESS_SETTING_KEY, appID];
-    NSData *data = [self.dataStore objectForKey:defaultKey];
+    NSData *data = [self.dataStore fb_objectForKey:defaultKey];
     if ([data isKindOfClass:NSData.class]) {
       NSMutableDictionary<NSString *, id> *codelessSetting = nil;
       id<FBSDKObjectDecoding> unarchiver = [FBSDKUnarchiverProvider createInsecureUnarchiverFor:data];
@@ -235,7 +215,7 @@ static id<FBSDKSettings> _settings;
           [FBSDKTypeUtility dictionary:_codelessSetting setObject:@(isCodelessSetupEnabled) forKey:CODELESS_SETUP_ENABLED_KEY];
           [FBSDKTypeUtility dictionary:_codelessSetting setObject:[NSDate date] forKey:CODELESS_SETTING_TIMESTAMP_KEY];
           // update the cached copy in user defaults
-          [self.dataStore setObject:[NSKeyedArchiver archivedDataWithRootObject:_codelessSetting] forKey:defaultKey];
+          [self.dataStore fb_setObject:[NSKeyedArchiver archivedDataWithRootObject:_codelessSetting requiringSecureCoding:NO error:nil] forKey:defaultKey];
           completionBlock(isCodelessSetupEnabled, codelessLoadingError);
         }
       }];
@@ -243,8 +223,6 @@ static id<FBSDKSettings> _settings;
     }
   }];
 }
-
-#pragma clang diagnostic pop
 
 + (nullable id<FBSDKGraphRequest>)requestToLoadCodelessSetup:(NSString *)appID
 {
@@ -261,7 +239,8 @@ static id<FBSDKSettings> _settings;
                                                                                  parameters:parameters
                                                                                 tokenString:nil
                                                                                  HTTPMethod:nil
-                                                                                      flags:FBSDKGraphRequestFlagSkipClientToken | FBSDKGraphRequestFlagDisableErrorRecovery];
+                                                                                      flags:FBSDKGraphRequestFlagSkipClientToken | FBSDKGraphRequestFlagDisableErrorRecovery
+                                                          useAlternativeDefaultDomainPrefix:NO];
   return request;
 }
 
@@ -291,6 +270,12 @@ static id<FBSDKSettings> _settings;
   if (_isCheckingSession) {
     return;
   }
+  
+  if ([[FBSDKDomainHandler sharedInstance] isDomainHandlingEnabled]) {
+    if (![self.settings isAdvertiserTrackingEnabled]) {
+      return;
+    }
+  }
 
   _isCheckingSession = YES;
   NSDictionary<NSString *, id> *parameters = @{
@@ -301,7 +286,8 @@ static id<FBSDKSettings> _settings;
                                                                                              [self.settings appID],
                                                                                              CODELESS_INDEXING_SESSION_ENDPOINT]
                                                                                  parameters:parameters
-                                                                                 HTTPMethod:FBSDKHTTPMethodPOST];
+                                                                                 HTTPMethod:FBSDKHTTPMethodPOST
+                                                          useAlternativeDefaultDomainPrefix:NO];
   [request startWithCompletion:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
     _isCheckingSession = NO;
     if ([result isKindOfClass:[NSDictionary<NSString *, id> class]]) {
@@ -428,7 +414,8 @@ static id<FBSDKSettings> _settings;
                                      CODELESS_INDEXING_PLATFORM_KEY : @"iOS",
                                      CODELESS_INDEXING_SESSION_ID_KEY : [self currentSessionDeviceID]
                                    }
-                                                                                 HTTPMethod:FBSDKHTTPMethodPOST];
+                                                                                 HTTPMethod:FBSDKHTTPMethodPOST
+                                                          useAlternativeDefaultDomainPrefix:NO];
   _isCodelessIndexing = YES;
   [request startWithCompletion:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
     _isCodelessIndexing = NO;
@@ -526,7 +513,7 @@ static id<FBSDKSettings> _settings;
   };
 }
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 + (void)reset
 {

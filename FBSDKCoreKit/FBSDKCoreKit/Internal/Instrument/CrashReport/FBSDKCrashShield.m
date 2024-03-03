@@ -6,15 +6,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#import "FBSDKCrashShield.h"
-
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #import "FBSDKFeatureChecking.h"
-#import "FBSDKFeatureDisabling.h"
 #import "FBSDKGraphRequestFactoryProtocol.h"
 #import "FBSDKGraphRequestProtocol.h"
-#import "FBSDKSettingsProtocol.h"
 
 @interface FBSDKCrashShield ()
 
@@ -98,10 +95,11 @@ static id<FBSDKSettings> _settings;
         @"FBSDKIntegrityManager",
       ],
       @"EventDeactivation" : @[
-        @"FBSDKEventDeactivationManager",
+        @"EventDeactivationManager",
       ],
       @"SKAdNetworkConversionValue" : @[
         @"FBSDKSKAdNetworkReporter",
+        @"FBSDKSKAdNetworkReporterV2",
         @"FBSDKSKAdNetworkConversionConfiguration",
         @"FBSDKSKAdNetworkRule",
         @"FBSDKSKAdNetworkEvent",
@@ -121,6 +119,7 @@ static id<FBSDKSettings> _settings;
       @"EventDeactivation" : @(FBSDKFeatureEventDeactivation),
       @"SKAdNetwork" : @(FBSDKFeatureSKAdNetwork),
       @"SKAdNetworkConversionValue" : @(FBSDKFeatureSKAdNetworkConversionValue),
+      @"SKAdNetworkV4" : @(FBSDKFeatureSKAdNetworkV4),
       @"Instrument" : @(FBSDKFeatureInstrument),
       @"CrashReport" : @(FBSDKFeatureCrashReport),
       @"CrashShield" : @(FBSDKFeatureCrashShield),
@@ -158,7 +157,8 @@ static id<FBSDKSettings> _settings;
       if (disabledFeatureReport) {
         id<FBSDKGraphRequest> request = [_graphRequestFactory createGraphRequestWithGraphPath:[NSString stringWithFormat:@"%@/instruments", [self.settings appID]]
                                                                                    parameters:@{@"crash_shield" : disabledFeatureReport}
-                                                                                   HTTPMethod:FBSDKHTTPMethodPOST];
+                                                                                   HTTPMethod:FBSDKHTTPMethodPOST
+                                                            useAlternativeDefaultDomainPrefix:NO];
 
         [request startWithCompletion:nil];
       }
@@ -202,7 +202,7 @@ static id<FBSDKSettings> _settings;
   return className;
 }
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 + (void)reset
 {

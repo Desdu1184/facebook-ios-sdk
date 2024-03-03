@@ -8,17 +8,14 @@
 
 #import "FBSDKAppEventsATEPublisher.h"
 
-#import <FBSDKCoreKit/FBSDKGraphRequestFlags.h>
-#import <FBSDKCoreKit/FBSDKGraphRequestHTTPMethod.h>
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
-#import "FBSDKAppEventsDeviceInfo.h"
 #import "FBSDKGraphRequestConnecting.h"
 #import "FBSDKGraphRequestFactoryProtocol.h"
 #import "FBSDKGraphRequestProtocol.h"
 #import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger.h"
-#import "FBSDKSettingsProtocol.h"
 
 @interface FBSDKAppEventsATEPublisher ()
 
@@ -60,7 +57,7 @@
   }
   self.isProcessing = YES;
   NSString *lastATEPingString = [NSString stringWithFormat:@"com.facebook.sdk:lastATEPing%@", self.appIdentifier];
-  id lastPublishDate = [self.store objectForKey:lastATEPingString];
+  id lastPublishDate = [self.store fb_objectForKey:lastATEPingString];
   if ([lastPublishDate isKindOfClass:NSDate.class] && [(NSDate *)lastPublishDate timeIntervalSinceNow] * -1 < 24 * 60 * 60) {
     self.isProcessing = NO;
     return;
@@ -93,16 +90,18 @@
                                                                                  parameters:parameters
                                                                                 tokenString:nil
                                                                                  HTTPMethod:FBSDKHTTPMethodPOST
-                                                                                      flags:FBSDKGraphRequestFlagDoNotInvalidateTokenOnError | FBSDKGraphRequestFlagDisableErrorRecovery];
+                                                                                      flags:FBSDKGraphRequestFlagDoNotInvalidateTokenOnError | FBSDKGraphRequestFlagDisableErrorRecovery
+                                                                               forAppEvents:YES
+                                                          useAlternativeDefaultDomainPrefix:NO];
   __block id<FBSDKDataPersisting> weakStore = self.store;
   [request startWithCompletion:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
     if (!error) {
-      [weakStore setObject:[NSDate date] forKey:lastATEPingString];
+      [weakStore fb_setObject:[NSDate date] forKey:lastATEPingString];
     }
     self.isProcessing = NO;
   }];
 
-#if FBTEST
+#if DEBUG
   self.isProcessing = NO;
 #endif
 }

@@ -11,8 +11,6 @@
 import TestTools
 import XCTest
 
-#if !os(tvOS)
-
 final class AEMRuleTests: XCTestCase {
 
   enum Keys {
@@ -44,7 +42,7 @@ final class AEMRuleTests: XCTestCase {
         Keys.values: [
           [
             Keys.currency: Values.USD,
-            Keys.amount: 100,
+            Keys.amount: 100.0,
           ],
         ],
       ],
@@ -60,7 +58,7 @@ final class AEMRuleTests: XCTestCase {
         Keys.values: [
           [
             Keys.currency: Values.USD,
-            Keys.amount: 100,
+            Keys.amount: 100.0,
           ],
         ],
       ],
@@ -103,7 +101,7 @@ final class AEMRuleTests: XCTestCase {
 
     let event = rule.events[0]
     XCTAssertEqual(event.eventName, Values.purchase)
-    XCTAssertEqual(event.values, [Values.USD: 100])
+    XCTAssertEqual(event.values, [Values.USD: 100.0])
   }
 
   func testInvalidCases() {
@@ -192,49 +190,18 @@ final class AEMRuleTests: XCTestCase {
     )
   }
 
-  func testEncoding() {
-    let coder = TestCoder()
+  func testEncodingAndDecoding() throws {
     let rule = validRule
-    rule.encode(with: coder)
+    let decodedObject = try CodabilityTesting.encodeAndDecode(rule)
 
-    let encodedConversionValue = coder.encodedObject[Keys.conversionValue] as? NSNumber
-    XCTAssertEqual(
-      encodedConversionValue?.intValue,
-      rule.conversionValue,
-      "Should encode the expected conversion_value with the correct key"
-    )
-    let encodedPriority = coder.encodedObject[Keys.priority] as? NSNumber
-    XCTAssertEqual(
-      encodedPriority?.intValue,
-      rule.priority,
-      "Should encode the expected priority with the correct key"
-    )
-    XCTAssertEqual(
-      coder.encodedObject[Keys.events] as? [AEMEvent],
-      rule.events,
-      "Should encode the expected events with the correct key"
-    )
-  }
+    // Test Objects
+    XCTAssertNotIdentical(decodedObject, rule, .isCodable)
+    XCTAssertEqual(decodedObject, rule, .isCodable)
 
-  func testDecoding() {
-    let decoder = TestCoder()
-    _ = AEMRule(coder: decoder)
-
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.conversionValue] as? String,
-      "decodeIntegerForKey",
-      "Should decode the expected type for the conversion_value key"
-    )
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.priority] as? String,
-      "decodeIntegerForKey",
-      "Should decode the expected type for the priority key"
-    )
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.events] as? NSSet,
-      [NSArray.self, AEMEvent.self],
-      "Should decode the expected type for the events key"
-    )
+    // Test Properties
+    XCTAssertEqual(decodedObject.conversionValue, rule.conversionValue, .isCodable)
+    XCTAssertEqual(decodedObject.priority, rule.priority, .isCodable)
+    XCTAssertEqual(rule.events, decodedObject.events, .isCodable)
   }
 
   func testRuleMatch() {
@@ -247,11 +214,11 @@ final class AEMRuleTests: XCTestCase {
           Keys.values: [
             [
               Keys.currency: Values.USD,
-              Keys.amount: 100,
+              Keys.amount: 100.0,
             ],
             [
               Keys.currency: Values.EU,
-              Keys.amount: 100,
+              Keys.amount: 100.0,
             ],
           ],
         ],
@@ -262,28 +229,28 @@ final class AEMRuleTests: XCTestCase {
     XCTAssertTrue(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp, Values.purchase],
-        recordedValues: [Values.purchase: [Values.USD: 1000]]
+        recordedValues: [Values.purchase: [Values.USD: 1000.0]]
       ),
       "Should match the expected events and values for the rule"
     )
     XCTAssertTrue(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp, Values.purchase],
-        recordedValues: [Values.purchase: [Values.EU: 1000]]
+        recordedValues: [Values.purchase: [Values.EU: 1000.0]]
       ),
       "Should match the expected events and values for the rule"
     )
     XCTAssertFalse(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp],
-        recordedValues: [Values.purchase: [Values.USD: 1000]]
+        recordedValues: [Values.purchase: [Values.USD: 1000.0]]
       ),
       "Should not match the unexpected events for the rule"
     )
     XCTAssertFalse(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp, Values.purchase],
-        recordedValues: [Values.purchase: [Values.JPY: 1000]]
+        recordedValues: [Values.purchase: [Values.JPY: 1000.0]]
       ),
       "Should not match the unexpected values for the rule"
     )
@@ -302,7 +269,7 @@ final class AEMRuleTests: XCTestCase {
           Keys.values: [
             [
               Keys.currency: Values.USD,
-              Keys.amount: 100,
+              Keys.amount: 100.0,
             ],
           ],
         ],
@@ -316,7 +283,7 @@ final class AEMRuleTests: XCTestCase {
     XCTAssertTrue(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp, Values.purchase, Values.testEvent],
-        recordedValues: [Values.purchase: [Values.USD: 1000]]
+        recordedValues: [Values.purchase: [Values.USD: 1000.0]]
       ),
       "Should match the expected events and values for the rule"
     )
@@ -330,7 +297,7 @@ final class AEMRuleTests: XCTestCase {
     XCTAssertFalse(
       rule.isMatched(
         withRecordedEvents: [Values.activateApp, Values.purchase],
-        recordedValues: [Values.purchase: [Values.USD: 1000]]
+        recordedValues: [Values.purchase: [Values.USD: 1000.0]]
       ),
       "Should not match the unexpected events for the rule"
     )
@@ -356,7 +323,7 @@ final class AEMRuleTests: XCTestCase {
           Keys.values: [
             [
               Keys.currency: Values.USD,
-              Keys.amount: 0,
+              Keys.amount: 0.0,
             ],
           ],
         ],
@@ -384,4 +351,8 @@ final class AEMRuleTests: XCTestCase {
   }
 }
 
-#endif
+// MARK: - Assumptions
+
+extension String {
+  fileprivate static let isCodable = "AEMRule should be encodable and decodable"
+}

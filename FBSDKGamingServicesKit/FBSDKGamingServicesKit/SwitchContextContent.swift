@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import Foundation
 
@@ -39,7 +37,7 @@ public final class SwitchContextContent: NSObject, ValidatableProtocol {
       !contextTokenID.isEmpty
     else {
       let message = "The contextToken is required."
-      let errorFactory = ErrorFactory()
+      let errorFactory = _ErrorFactory()
       throw errorFactory.requiredArgumentError(
         name: "contextToken",
         message: message,
@@ -48,5 +46,3 @@ public final class SwitchContextContent: NSObject, ValidatableProtocol {
     }
   }
 }
-
-#endif

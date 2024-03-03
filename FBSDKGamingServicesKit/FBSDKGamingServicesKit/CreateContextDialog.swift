@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import Foundation
 
@@ -65,13 +63,13 @@ public final class CreateContextDialog: ContextWebDialog {
       windowFinder: windowFinder
     )
 
-    currentWebDialog = WebDialog.createAndShow(
+    currentWebDialog = _WebDialog(
       name: Keys.methodName,
-      parameters: parameters,
-      frame: frame,
-      delegate: self,
-      windowFinder: windowFinder
+      parameters: parameters as? [String: String],
+      webViewFrame: frame
     )
+    currentWebDialog?.delegate = self
+    currentWebDialog?.show()
 
     InternalUtility.shared.registerTransientObject(self)
     return true
@@ -84,5 +82,3 @@ public final class CreateContextDialog: ContextWebDialog {
     try content.validate()
   }
 }
-
-#endif

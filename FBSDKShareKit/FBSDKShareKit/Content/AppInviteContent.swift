@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import Foundation
 
@@ -63,23 +61,23 @@ public final class AppInviteContent: NSObject {
 
 // MARK: - Type Dependencies
 
-extension AppInviteContent: DependentType {
-  struct Dependencies {
+extension AppInviteContent: DependentAsType {
+  struct TypeDependencies {
     var validator: ShareValidating.Type
     var errorFactory: ErrorCreating
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static var defaultDependencies: Dependencies? = Dependencies(
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(
     validator: _ShareUtility.self,
-    errorFactory: ErrorFactory()
+    errorFactory: _ErrorFactory()
   )
 }
 
 // MARK: - Validation
 
-extension AppInviteContent: SharingValidation {
+extension AppInviteContent: SharingValidatable {
 
   public func validate(options bridgeOptions: ShareBridgeOptions) throws {
     let validator = try Self.getDependencies().validator
@@ -145,5 +143,3 @@ extension AppInviteContent: SharingValidation {
     }
   }
 }
-
-#endif

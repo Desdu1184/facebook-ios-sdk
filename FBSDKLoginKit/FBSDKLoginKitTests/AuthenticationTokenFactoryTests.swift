@@ -33,8 +33,9 @@ final class AuthenticationTokenFactoryTests: XCTestCase {
     }
 
     AuthenticationTokenFactory().createToken(
-      fromTokenString: "invalid_token",
+      tokenString: "invalid_token",
       nonce: "123456789",
+      graphDomain: "facebook",
       completion: completion
     )
 
@@ -45,7 +46,7 @@ final class AuthenticationTokenFactoryTests: XCTestCase {
   // MARK: - Verifying Signature
 
   func testCertificateEndpointURL() {
-    let url = AuthenticationTokenFactory()._certificateEndpoint
+    let url = AuthenticationTokenFactory().certificateEndpoint
     XCTAssertEqual(url.absoluteString, "https://m.facebook.com/.well-known/oauth/openid/certs/")
   }
 

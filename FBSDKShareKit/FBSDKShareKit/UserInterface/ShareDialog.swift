@@ -6,17 +6,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import FBSDKCoreKit_Basics
 import Foundation
+import Photos
 import UIKit
 
 /// A dialog for sharing content on Facebook.
 @objcMembers
 @objc(FBSDKShareDialog)
-public final class ShareDialog: NSObject, SharingDialog {
+public class ShareDialog: NSObject, SharingDialog { // swiftlint:disable:this prefer_final_classes
   private struct MissingContentError: Error {}
   private struct UnknownValidationError: Error {}
   private struct BridgeRequestCreationError: Error {}
@@ -57,7 +56,7 @@ public final class ShareDialog: NSObject, SharingDialog {
    */
   public var shouldFailOnDataError = false
 
-  private var webDialog: WebDialog?
+  var webDialog: _WebDialog?
   private var temporaryFiles = [URL]()
 
   /**
@@ -96,8 +95,8 @@ public final class ShareDialog: NSObject, SharingDialog {
     viewController: UIViewController?,
     content: SharingContent?,
     delegate: SharingDelegate?
-  ) -> Self {
-    Self(viewController: viewController, content: content, delegate: delegate)
+  ) -> ShareDialog {
+    ShareDialog(viewController: viewController, content: content, delegate: delegate)
   }
 
   /**
@@ -112,8 +111,8 @@ public final class ShareDialog: NSObject, SharingDialog {
     viewController: UIViewController?,
     content: SharingContent?,
     delegate: SharingDelegate?
-  ) -> Self {
-    let dialog = Self(viewController: viewController, content: content, delegate: delegate)
+  ) -> ShareDialog {
+    let dialog = ShareDialog(viewController: viewController, content: content, delegate: delegate)
     dialog.show()
     return dialog
   }
@@ -121,8 +120,8 @@ public final class ShareDialog: NSObject, SharingDialog {
 
 // MARK: - Type Dependencies
 
-extension ShareDialog: DependentType {
-  struct Dependencies {
+extension ShareDialog: DependentAsType {
+  struct TypeDependencies {
     var internalURLOpener: ShareInternalURLOpening
     var internalUtility: InternalUtilityProtocol
     var settings: SettingsProtocol
@@ -133,21 +132,23 @@ extension ShareDialog: DependentType {
     var windowFinder: _WindowFinding
     var errorFactory: ErrorCreating
     var eventLogger: ShareEventLogging
+    var mediaLibrarySearcher: MediaLibrarySearching
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static var defaultDependencies: Dependencies? = Dependencies(
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(
     internalURLOpener: ShareUIApplication.shared,
     internalUtility: InternalUtility.shared,
     settings: Settings.shared,
     shareUtility: _ShareUtility.self,
     bridgeAPIRequestFactory: ShareBridgeAPIRequestFactory(),
-    bridgeAPIRequestOpener: BridgeAPI.shared,
+    bridgeAPIRequestOpener: _BridgeAPI.shared,
     socialComposeViewControllerFactory: SocialComposeViewControllerFactory(),
     windowFinder: InternalUtility.shared,
-    errorFactory: ErrorFactory(),
-    eventLogger: AppEvents.shared
+    errorFactory: _ErrorFactory(),
+    eventLogger: AppEvents.shared,
+    mediaLibrarySearcher: PHImageManager.default()
   )
 
   #if DEBUG
@@ -201,9 +202,7 @@ extension ShareDialog {
 
   @discardableResult
   public func show() -> Bool {
-    guard let internalUtility = try? Self.getDependencies().internalUtility else {
-      return false
-    }
+    guard let internalUtility = Self.internalUtility else { return false }
 
     do {
       try validate()
@@ -299,19 +298,11 @@ extension ShareDialog {
   }
 
   private var canShowNative: Bool {
-    guard let internalUtility = try? Self.getDependencies().internalUtility else {
-      return false
-    }
-
-    return internalUtility.isFacebookAppInstalled
+    Self.internalUtility?.isFacebookAppInstalled ?? false
   }
 
   private var canShowShareSheet: Bool {
-    guard let internalUtility = try? Self.getDependencies().internalUtility else {
-      return false
-    }
-
-    return internalUtility.isFacebookAppInstalled
+    Self.internalUtility?.isFacebookAppInstalled ?? false
   }
 
   private var canAttributeThroughShareSheet: Bool {
@@ -327,7 +318,7 @@ extension ShareDialog {
 
     var canOpenURL = false
     if let url = components.url,
-       let internalURLOpener = try? Self.getDependencies().internalURLOpener {
+       let internalURLOpener = Self.internalURLOpener {
       canOpenURL = internalURLOpener.canOpenURL(url)
     }
 
@@ -335,9 +326,7 @@ extension ShareDialog {
   }
 
   private var canUseFBShareSheet: Bool {
-    guard let urlOpener = try? Self.getDependencies().internalURLOpener else {
-      return false
-    }
+    guard let urlOpener = Self.internalURLOpener else { return false }
 
     var components = URLComponents()
     components.scheme = URLScheme.facebookAPI.rawValue
@@ -360,8 +349,10 @@ extension ShareDialog {
   }
 
   private func contentVideoURL(for video: ShareVideo) -> URL? {
-    if let url = video.videoAsset?.requestVideoURL(timeoutInMilliseconds: 500) {
-      return url
+    if let asset = video.videoAsset {
+      guard let mediaLibrarySearcher = Self.mediaLibrarySearcher else { return nil }
+
+      return try? mediaLibrarySearcher.fb_getVideoURL(for: asset)
     } else if let data = video.data {
       let file = Self.temporaryDirectory.appendingPathComponent(UUID().uuidString)
       temporaryFiles.append(file)
@@ -542,13 +533,13 @@ extension ShareDialog {
     }
 
     let parameters = dependencies.shareUtility.feedShareDictionary(for: content)
-    webDialog = WebDialog.createAndShow(
+
+    webDialog = _WebDialog(
       name: Self.feedMethodName,
-      parameters: parameters,
-      frame: .zero,
-      delegate: self,
-      windowFinder: dependencies.windowFinder
+      parameters: parameters as? [String: String]
     )
+    webDialog?.delegate = self
+    webDialog?.show()
   }
 
   private func showNative() throws {
@@ -698,13 +689,12 @@ extension ShareDialog {
 
     let components = dependencies.shareUtility.buildWebShareBridgeComponents(for: content)
 
-    webDialog = WebDialog.createAndShow(
+    webDialog = _WebDialog(
       name: components.methodName,
-      parameters: components.parameters,
-      frame: .zero,
-      delegate: self,
-      windowFinder: dependencies.windowFinder
+      parameters: components.parameters as? [String: String]
     )
+    webDialog?.delegate = self
+    webDialog?.show()
   }
 
   private var shouldUseNativeDialog: Bool {
@@ -712,7 +702,7 @@ extension ShareDialog {
       return true
     } else {
       return ShareDialogConfiguration()
-        .shouldUseNativeDialog(forDialogName: FBSDKDialogConfigurationNameShare)
+        .shouldUseNativeDialog(forDialogName: DialogConfigurationName.share)
     }
   }
 
@@ -721,7 +711,7 @@ extension ShareDialog {
       return false
     } else {
       return ShareDialogConfiguration()
-        .shouldUseSafariViewController(forDialogName: FBSDKDialogConfigurationNameShare)
+        .shouldUseSafariViewController(forDialogName: DialogConfigurationName.share)
     }
   }
 
@@ -845,19 +835,13 @@ extension ShareDialog {
     }
 
     if flags.containsVideos {
-      guard AccessToken.current != nil else {
-        throw dependencies.errorFactory.invalidArgumentError(
-          domain: ShareErrorDomain,
-          name: "shareContent",
-          value: content,
-          message: "The web share dialog needs a valid access token to stage videos.",
-          underlyingError: nil
-        )
-      }
-
-      if let video = content as? ShareVideoContent {
-        try video.validate(options: bridgeOptions)
-      }
+      throw dependencies.errorFactory.invalidArgumentError(
+        domain: ShareErrorDomain,
+        name: "shareContent",
+        value: content,
+        message: "video sharing through the browser is not supported.",
+        underlyingError: nil
+      )
     }
 
     if flags.containsMedia,
@@ -993,8 +977,7 @@ extension ShareDialog {
   }
 
   private func invokeDelegateDidComplete(results: [String: Any]) {
-    let eventLogger = try? Self.getDependencies().eventLogger
-    eventLogger?.logInternalEvent(
+    Self.eventLogger?.logInternalEvent(
       .shareDialogResult,
       parameters: [.outcome: ShareAppEventsParameters.DialogOutcomeValue.completed],
       isImplicitlyLogged: true,
@@ -1011,8 +994,7 @@ extension ShareDialog {
       .errorMessage: nsError.description,
     ]
 
-    let eventLogger = try? Self.getDependencies().eventLogger
-    eventLogger?.logInternalEvent(
+    Self.eventLogger?.logInternalEvent(
       .shareDialogResult,
       parameters: parameters,
       isImplicitlyLogged: true,
@@ -1042,8 +1024,7 @@ extension ShareDialog {
       .shareContentType: contentType,
     ]
 
-    let eventLogger = try? Self.getDependencies().eventLogger
-    eventLogger?.logInternalEvent(
+    Self.eventLogger?.logInternalEvent(
       .shareDialogShow,
       parameters: parameters,
       isImplicitlyLogged: true,
@@ -1126,7 +1107,7 @@ extension ShareDialog {
 
 extension ShareDialog: WebDialogDelegate {
   public func webDialog(
-    _ webDialog: WebDialog,
+    _ webDialog: _WebDialog,
     didCompleteWithResults results: [String: Any]
   ) {
     guard
@@ -1156,25 +1137,21 @@ extension ShareDialog: WebDialogDelegate {
     dependencies.internalUtility.unregisterTransientObject(self)
   }
 
-  public func webDialog(_ webDialog: WebDialog, didFailWithError error: Error) {
+  public func webDialog(_ webDialog: _WebDialog, didFailWithError error: Error) {
     guard self.webDialog === webDialog else { return }
 
     self.webDialog = nil
     invokeDelegateDidFail(error: error)
 
-    let internalUtility = try? Self.getDependencies().internalUtility
-    internalUtility?.unregisterTransientObject(self)
+    Self.internalUtility?.unregisterTransientObject(self)
   }
 
-  public func webDialogDidCancel(_ webDialog: WebDialog) {
+  public func webDialogDidCancel(_ webDialog: _WebDialog) {
     guard self.webDialog === webDialog else { return }
 
     self.webDialog = nil
     invokeDelegateDidCancel()
 
-    let internalUtility = try? Self.getDependencies().internalUtility
-    internalUtility?.unregisterTransientObject(self)
+    Self.internalUtility?.unregisterTransientObject(self)
   }
 }
-
-#endif

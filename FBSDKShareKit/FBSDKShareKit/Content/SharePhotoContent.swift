@@ -52,15 +52,15 @@ public final class SharePhotoContent: NSObject {
 
 // MARK: - Class Dependencies
 
-extension SharePhotoContent: DependentType {
-  struct Dependencies {
+extension SharePhotoContent: DependentAsType {
+  struct TypeDependencies {
     var imageFinder: MediaLibrarySearching
     var validator: ShareValidating.Type
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static let defaultDependencies: Dependencies? = Dependencies(
+  static let defaultDependencies: TypeDependencies? = TypeDependencies(
     imageFinder: PHImageManager.default(),
     validator: _ShareUtility.self
   )
@@ -81,7 +81,7 @@ extension SharePhotoContent: SharingContent {
     _ existingParameters: [String: Any],
     options bridgeOptions: ShareBridgeOptions
   ) -> [String: Any] {
-    guard let imageFinder = try? Self.getDependencies().imageFinder else {
+    guard let imageFinder = Self.imageFinder else {
       return existingParameters
     }
 
@@ -89,7 +89,7 @@ extension SharePhotoContent: SharingContent {
 
     photos.forEach { photo in
       if let asset = photo.photoAsset {
-        if let image = try? imageFinder.findImage(for: asset) {
+        if let image = try? imageFinder.fb_findImage(for: asset) {
           images.append(image)
         }
       } else if let url = photo.imageURL {
@@ -113,9 +113,9 @@ extension SharePhotoContent: SharingContent {
   }
 }
 
-// MARK: - SharingValidation
+// MARK: - SharingValidatable
 
-extension SharePhotoContent: SharingValidation {
+extension SharePhotoContent: SharingValidatable {
   // The number of photos that can be shared at once is restricted
   private static let photosCountRange = 1 ... 6
 

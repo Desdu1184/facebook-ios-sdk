@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 import Foundation
 
@@ -69,7 +67,7 @@ public final class ChooseContextContent: NSObject, ValidatableProtocol {
     let minimumGreaterThanMaximum = minParticipants > maxParticipants
     if minimumGreaterThanMaximum, maxParticipants != 0 {
       let message = "The minimum size cannot be greater than the maximum size"
-      throw ErrorFactory().requiredArgumentError(
+      throw _ErrorFactory().requiredArgumentError(
         name: "minParticipants",
         message: message,
         underlyingError: nil
@@ -86,5 +84,3 @@ public final class ChooseContextContent: NSObject, ValidatableProtocol {
       && maxParticipants == contentObject?.maxParticipants
   }
 }
-
-#endif

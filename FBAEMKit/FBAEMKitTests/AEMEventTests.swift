@@ -11,8 +11,6 @@
 import TestTools
 import XCTest
 
-#if !os(tvOS)
-
 final class AEMEventTests: XCTestCase {
 
   enum Keys {
@@ -49,11 +47,11 @@ final class AEMEventTests: XCTestCase {
     Keys.values: [
       [
         Keys.currency: Values.usd,
-        Keys.amount: 100,
+        Keys.amount: 100.0,
       ],
       [
         Keys.currency: Values.JPY,
-        Keys.amount: 1000,
+        Keys.amount: 1000.0,
       ],
     ],
   ])
@@ -79,7 +77,7 @@ final class AEMEventTests: XCTestCase {
       Values.purchase,
       "AEM event name should match the expected event_name in the json"
     )
-    let expectedValues: [String: Int] = [
+    let expectedValues: [String: Double] = [
       Values.USD: 100,
       Values.JPY: 1000,
     ]
@@ -151,53 +149,37 @@ final class AEMEventTests: XCTestCase {
     )
   }
 
-  func testEncodingWithValues() {
-    let coder = TestCoder()
+  func testEncodingAndDecodingWithValues() throws {
     let event = validEventWithValues
-    event?.encode(with: coder)
+    // swiftlint:disable:next force_unwrapping
+    let decodedObject = try CodabilityTesting.encodeAndDecode(event!)
 
-    XCTAssertEqual(
-      coder.encodedObject[Keys.eventName] as? String,
-      event?.eventName,
-      "Should encode the expected event_name with the correct key"
-    )
-    XCTAssertEqual(
-      coder.encodedObject[Keys.values] as? [String: Int],
-      event?.values,
-      "Should encode the expected values with the correct key"
-    )
+    // Test Objects
+    XCTAssertNotIdentical(decodedObject, event, .isCodable)
+    XCTAssertEqual(decodedObject, event, .isCodable)
+
+    // Test Properties
+    XCTAssertEqual(event?.eventName, decodedObject.eventName)
+    XCTAssertEqual(event?.values, decodedObject.values)
   }
 
-  func testEncodingWithoutValues() {
-    let coder = TestCoder()
+  func testEncodingAndDecodingWithoutValues() throws {
     let event = validEventWithoutValues
-    event?.encode(with: coder)
+    // swiftlint:disable:next force_unwrapping
+    let decodedObject = try CodabilityTesting.encodeAndDecode(event!)
 
-    XCTAssertEqual(
-      coder.encodedObject[Keys.eventName] as? String,
-      event?.eventName,
-      "Should encode the expected event_name with the correct key"
-    )
-    XCTAssertNil(
-      coder.encodedObject[Keys.values] as? [String: Int],
-      "Should not encode values"
-    )
-  }
+    // Test Objects
+    XCTAssertNotIdentical(decodedObject, event, .isCodable)
+    XCTAssertEqual(decodedObject, event, .isCodable)
 
-  func testDecoding() {
-    let decoder = TestCoder()
-    _ = AEMEvent(coder: decoder)
-
-    XCTAssertTrue(
-      decoder.decodedObject[Keys.eventName] is NSString.Type,
-      "Should decode the expected type for the event_name key"
-    )
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.values] as? NSSet,
-      [NSDictionary.self, NSNumber.self, NSString.self],
-      "Should decode the expected types for the values key"
-    )
+    // Test Properties
+    XCTAssertEqual(event?.eventName, decodedObject.eventName)
+    XCTAssertEqual(event?.values, decodedObject.values)
   }
 }
 
-#endif
+// MARK: - Assumptions
+
+extension String {
+  fileprivate static let isCodable = "AEMEvents should be encodable and decodable"
+}

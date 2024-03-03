@@ -82,6 +82,7 @@ enum AppEventUserAndAppDataField: String {
   case installerPackage = "installer_package"
   case receiptData = "receipt_data"
   case urlSchemes = "url_schemes"
+  case campaignIds = "campaign_ids"
 }
 
 // MARK: ConversionsAPI parameters
@@ -134,6 +135,7 @@ enum ConversionsAPIUserAndAppDataField: String {
   case installerPackage = "installer_package"
   case receiptData = "receipt_data"
   case urlSchemes = "url_schemes"
+  case campaignIds = "campaign_ids"
 }
 
 enum ConversionsAPIEventName: String {
@@ -190,6 +192,7 @@ enum AppEventsConversionsAPITransformer {
     .installerPackage: .init(section: .appData, field: .installerPackage),
     .receiptData: .init(section: .appData, field: .receiptData),
     .urlSchemes: .init(section: .appData, field: .urlSchemes),
+    .campaignIds: .init(section: .appData, field: .campaignIds),
     .userData: .init(section: .userData, field: nil),
   ]
 
@@ -204,7 +207,8 @@ enum AppEventsConversionsAPITransformer {
     .eventName: .init(section: nil, field: .eventName),
     .valueToSum: .init(section: .customData, field: .valueToSum),
     .contentIds: .init(section: .customData, field: .contentIds), // string to array conversion required
-    .contents: .init(section: .customData, field: .contents), // string to array conversion required, contents has an extra field: price
+    // string to array conversion required, contents has an extra field: price
+    .contents: .init(section: .customData, field: .contents),
     .contentType: .init(section: .customData, field: .contentType),
     .currency: .init(section: .customData, field: .currency),
     .description: .init(section: .customData, field: .description),
@@ -474,6 +478,7 @@ enum AppEventsConversionsAPITransformer {
     return transformedEvents
   }
 
+  // swiftlint:disable:next function_parameter_count
   static func combineAllTransformedData(
     eventType: AppEventType,
     userData: [String: Any],

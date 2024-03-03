@@ -9,7 +9,8 @@
 import FBSDKCoreKit_Basics
 
 @objcMembers
-public class FBSDKTransformerGraphRequestFactory: GraphRequestFactory {
+// swiftlint:disable:next prefer_final_classes
+public class FBSDKTransformerGraphRequestFactory: NSObject {
   let contentType = "application/json"
   let timeoutInterval = 60
   let maxCachedEvents = 1000
@@ -18,6 +19,7 @@ public class FBSDKTransformerGraphRequestFactory: GraphRequestFactory {
   let retryEventsHttpResponse = [
     -1009, // kCFURLErrorNotConnectedToInternet
     -1004, // kCFURLErrorCannotConnectToHost
+    429, // CAPI-G Too many request
     503, // ServiceUnavailable
     504, // GatewayTimeout
   ]
@@ -26,13 +28,14 @@ public class FBSDKTransformerGraphRequestFactory: GraphRequestFactory {
 
   private let serialQueue: DispatchQueue
   private let factory = GraphRequestFactory()
-  internal var credentials: CbCredentials?
+
+  public private(set) var credentials: CapiGCredentials?
   internal var transformedEvents: [[String: Any]] = []
 
-  public struct CbCredentials {
-    let accessKey: String
-    let capiGatewayURL: String
-    let datasetID: String
+  public struct CapiGCredentials {
+    public let accessKey: String
+    public let capiGatewayURL: String
+    public let datasetID: String
   }
 
   public override init() {
@@ -41,96 +44,75 @@ public class FBSDKTransformerGraphRequestFactory: GraphRequestFactory {
   }
 
   public func configure(datasetID: String, url: String, accessKey: String) {
-    credentials = .init(accessKey: accessKey, capiGatewayURL: url, datasetID: datasetID)
+    credentials = CapiGCredentials(accessKey: accessKey, capiGatewayURL: url, datasetID: datasetID)
   }
 
-  func capiGatewayEndpoint(with appID: Int) -> String? {
-    guard let credentials = credentials else {
-      return nil
-    }
-    return String(format: "%@/capi/%@/events?accessKey=%@", credentials.capiGatewayURL, credentials.datasetID, credentials.accessKey)
-  }
-
-  public func callCapiGatewayAPI(with graphPath: String, parameters: [String: Any]) {
-    serialQueue.async {
-      let graphPathComponents = graphPath.components(separatedBy: "/")
-      guard graphPathComponents.count == 2,
-            let appID = Int(graphPathComponents[0]) else {
-        return
-      }
-      let cbEndpoint = self.capiGatewayEndpoint(with: appID)
-      let transformed = AppEventsConversionsAPITransformer.conversionsAPICompatibleEvent(from: parameters)
-
-      guard cbEndpoint != nil,
-            transformed != nil else {
+  public func callCapiGatewayAPI(with parameters: [String: Any], userAgent: String) {
+    serialQueue.async { [weak self] in
+      guard let self = self,
+            let cbEndpoint = self.capiGatewayEndpoint(),
+            let url = URL(string: cbEndpoint) else {
         return
       }
 
       do {
+        let transformed = AppEventsConversionsAPITransformer.conversionsAPICompatibleEvent(from: parameters)
         self.appendEvents(events: transformed)
         let count = min(self.transformedEvents.count, self.maxProcessedEvents)
-        let processedEvents = Array(self.transformedEvents[0..<count])
-        self.transformedEvents.removeSubrange(0..<count)
-        let jsonData = try JSONSerialization.data(withJSONObject: processedEvents, options: [])
-        guard let url = URL(string: cbEndpoint!) else {
-          return
-        }
-        var request = URLRequest(url: url, cachePolicy: NSURLRequest.CachePolicy.useProtocolCachePolicy, timeoutInterval: TimeInterval(self.timeoutInterval))
+        let processedEvents = Array(self.transformedEvents[0 ..< count])
+        self.transformedEvents.removeSubrange(0 ..< count)
+
+        let requestDictionary = self.capiGatewayRequestDictionary(with: processedEvents)
+        let jsonData = try JSONSerialization.data(withJSONObject: requestDictionary, options: [])
+
+        var request = URLRequest(
+          url: url,
+          cachePolicy: .useProtocolCachePolicy,
+          timeoutInterval: TimeInterval(self.timeoutInterval)
+        )
         request.httpMethod = HTTPMethod.post.rawValue
         request.setValue(self.contentType, forHTTPHeaderField: "Content-Type")
         request.httpShouldHandleCookies = false
         request.httpBody = jsonData
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 
         URLSession.shared.dataTask(with: request) { _, response, error in
           self.serialQueue.async {
             guard error == nil,
                   let httpResponse = response as? HTTPURLResponse,
-                  200...299 ~= httpResponse.statusCode else {
-                    self.handleError(response: response, events: processedEvents)
-                    return
+                  200 ... 299 ~= httpResponse.statusCode else {
+              self.handleError(response: response, events: processedEvents)
+              return
             }
           }
-        }.resume()
+        }
+        .resume()
       } catch {
         return
       }
     }
   }
 
-  public override func createGraphRequest(withGraphPath graphPath: String, parameters: [String: Any], tokenString: String?, httpMethod: HTTPMethod?, flags: GraphRequestFlags) -> GraphRequestProtocol {
-    callCapiGatewayAPI(with: graphPath, parameters: parameters)
-    return factory.createGraphRequest(withGraphPath: graphPath, parameters: parameters, tokenString: tokenString, httpMethod: httpMethod, flags: flags)
+  internal func capiGatewayRequestDictionary(with events: [[String: Any]]) -> [String: Any] {
+    guard let accessKey = credentials?.accessKey else { return [:] }
+
+    return [
+      "data": events,
+      "accessKey": accessKey,
+    ]
   }
 
-  public override func createGraphRequest(withGraphPath graphPath: String, parameters: [String: Any]) -> GraphRequestProtocol {
-    callCapiGatewayAPI(with: graphPath, parameters: parameters)
-    return factory.createGraphRequest(withGraphPath: graphPath, parameters: parameters)
-  }
+  private func capiGatewayEndpoint() -> String? {
+    guard let credentials = credentials else { return nil }
 
-  public override func createGraphRequest(withGraphPath graphPath: String) -> GraphRequestProtocol {
-    factory.createGraphRequest(withGraphPath: graphPath)
-  }
-
-  public override func createGraphRequest(withGraphPath graphPath: String, parameters: [String: Any], httpMethod: HTTPMethod) -> GraphRequestProtocol {
-    callCapiGatewayAPI(with: graphPath, parameters: parameters)
-    return factory.createGraphRequest(withGraphPath: graphPath, parameters: parameters, httpMethod: httpMethod)
-  }
-
-  public override func createGraphRequest(withGraphPath graphPath: String, parameters: [String: Any], tokenString: String?, version: String?, httpMethod: HTTPMethod) -> GraphRequestProtocol {
-    callCapiGatewayAPI(with: graphPath, parameters: parameters)
-    return factory.createGraphRequest(withGraphPath: graphPath, parameters: parameters, tokenString: tokenString, version: version, httpMethod: httpMethod)
-  }
-
-  public override func createGraphRequest(withGraphPath graphPath: String, parameters: [String: Any], flags: GraphRequestFlags) -> GraphRequestProtocol {
-    callCapiGatewayAPI(with: graphPath, parameters: parameters)
-    return factory.createGraphRequest(withGraphPath: graphPath, parameters: parameters, flags: flags)
+    return String(format: "%@/capi/%@/events", credentials.capiGatewayURL, credentials.datasetID)
   }
 
   internal func handleError(response: URLResponse?, events: [[String: Any]]?) {
     // If it's not server error, we'll re-append the events to the event queue
     let response = response as? HTTPURLResponse
     if let statusCode = response?.statusCode {
-      if !self.retryEventsHttpResponse.contains(statusCode) {
+      if !retryEventsHttpResponse.contains(statusCode) {
         return
       }
     }
@@ -141,7 +123,7 @@ public class FBSDKTransformerGraphRequestFactory: GraphRequestFactory {
     transformedEvents.append(contentsOf: events ?? [])
     let remainingEventsCount = transformedEvents.count - maxCachedEvents
     if remainingEventsCount > 0 {
-      transformedEvents.removeSubrange(0..<remainingEventsCount)
+      transformedEvents.removeSubrange(0 ..< remainingEventsCount)
     }
   }
 }

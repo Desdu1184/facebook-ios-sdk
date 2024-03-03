@@ -10,22 +10,7 @@
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
 
-#import "FBSDKAEMReporterProtocol.h"
-#import "FBSDKAppEventDropDetermining.h"
-#import "FBSDKAppEventParametersExtracting.h"
-#import "FBSDKAppEventsConfiguring.h"
-#import "FBSDKAppEventsUtilityProtocol.h"
-#import "FBSDKApplicationActivating.h"
-#import "FBSDKApplicationLifecycleObserving.h"
-#import "FBSDKApplicationStateSetting.h"
 #import "FBSDKEventLogging.h"
-#import "FBSDKEventsProcessing.h"
-#import "FBSDKIntegrityParametersProcessorProvider.h"
-#import "FBSDKLoggingNotifying.h"
-#import "FBSDKMetadataIndexing.h"
-#import "FBSDKSourceApplicationTracking.h"
-#import "FBSDKTimeSpentRecording.h"
-#import "FBSDKUserIDProviding.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -34,15 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSString *const FBSDKAppEventsDialogOutcomeValue_Completed;
 FOUNDATION_EXPORT NSString *const FBSDKAppEventsDialogOutcomeValue_Failed;
 
-@interface FBSDKAppEvents (Internal) <
-  FBSDKAppEventsConfiguring,
-  FBSDKApplicationActivating,
-  FBSDKApplicationLifecycleObserving,
-  FBSDKApplicationStateSetting,
-  FBSDKEventLogging,
-  FBSDKSourceApplicationTracking,
-  FBSDKUserIDProviding
->
+@interface FBSDKAppEvents (Internal)
 
 // Dependencies
 
@@ -59,6 +36,10 @@ FOUNDATION_EXPORT NSString *const FBSDKAppEventsDialogOutcomeValue_Failed;
 @property (nullable, nonatomic) id<FBSDKAppEventsStatePersisting> appEventsStateStore;
 @property (nullable, nonatomic) id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> eventDeactivationParameterProcessor;
 @property (nullable, nonatomic) id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> restrictiveDataFilterParameterProcessor;
+@property (nullable, nonatomic) id<FBSDKAppEventsParameterProcessing> protectedModeManager;
+@property (nullable, nonatomic) id<FBSDKMACARuleMatching> macaRuleMatchingManager;
+@property (nullable, nonatomic) id<FBSDKEventsProcessing> blocklistEventsManager;
+@property (nullable, nonatomic) id<FBSDKEventsProcessing> redactedEventsManager;
 @property (nullable, nonatomic) id<FBSDKATEPublisherCreating> atePublisherFactory;
 @property (nullable, nonatomic) id<FBSDKAppEventsStateProviding> appEventsStateProvider;
 @property (nullable, nonatomic) id<FBSDKAdvertiserIDProviding> advertiserIDProvider;
@@ -70,6 +51,7 @@ FOUNDATION_EXPORT NSString *const FBSDKAppEventsDialogOutcomeValue_Failed;
 @property (nullable, nonatomic) id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider> onDeviceMLModelManager;
 @property (nullable, nonatomic) id<FBSDKMetadataIndexing> metadataIndexer;
 @property (nullable, nonatomic) id<FBSDKAppEventsReporter> skAdNetworkReporter;
+@property (nullable, nonatomic) id<FBSDKAppEventsReporter> skAdNetworkReporterV2;
 @property (nullable, nonatomic) Class<FBSDKCodelessIndexing> codelessIndexer;
 @property (nullable, nonatomic) Class<FBSDKSwizzling> swizzler;
 @property (nullable, nonatomic) Class<FBSDKAEMReporter> aemReporter;

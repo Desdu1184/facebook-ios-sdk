@@ -9,8 +9,6 @@
 import FBSDKCoreKit
 import Foundation
 
-#if !os(tvOS)
-
 /**
  A button to share content.
 
@@ -20,7 +18,7 @@ import Foundation
 @objcMembers
 @objc(FBSDKShareButton)
 public final class FBShareButton: FBButton, SharingButton {
-  private var dialog: ShareDialog?
+  var dialog: ShareDialog?
 
   public var shareContent: SharingContent? {
     get { dialog?.shareContent }
@@ -52,13 +50,16 @@ public final class FBShareButton: FBButton, SharingButton {
   }
 
   public func configureButton() {
-    let title = NSLocalizedString(
-      "ShareButton.Share",
-      tableName: "FacebookSDK",
-      bundle: InternalUtility.shared.bundleForStrings,
-      value: "Share",
-      comment: "The label for FBSDKShareButton"
-    )
+    var title = ""
+    if let bundle = Self.stringProvider?.bundleForStrings {
+      title = NSLocalizedString(
+        "ShareButton.Share",
+        tableName: "FacebookSDK",
+        bundle: bundle,
+        value: "Share",
+        comment: "The label for FBSDKShareButton"
+      )
+    }
 
     configure(
       with: nil,
@@ -74,7 +75,8 @@ public final class FBShareButton: FBButton, SharingButton {
     dialog = ShareDialog(viewController: nil, content: nil, delegate: nil)
   }
 
-  @IBAction private func share() {
+  // swiftlint:disable:next private_action
+  @IBAction func share() {
     logTapEvent(
       withEventName: .shareButtonDidTap,
       parameters: analyticsParameters
@@ -84,4 +86,14 @@ public final class FBShareButton: FBButton, SharingButton {
   }
 }
 
-#endif
+// MARK: - Type dependencies
+
+extension FBShareButton: DependentAsType {
+  struct TypeDependencies {
+    var stringProvider: UserInterfaceStringProviding
+  }
+
+  static var configuredDependencies: TypeDependencies?
+
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(stringProvider: InternalUtility.shared)
+}

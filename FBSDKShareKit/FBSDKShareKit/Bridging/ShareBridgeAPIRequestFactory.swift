@@ -6,8 +6,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !os(tvOS)
-
 import FBSDKCoreKit
 
 final class ShareBridgeAPIRequestFactory: BridgeAPIRequestCreating {
@@ -19,7 +17,7 @@ final class ShareBridgeAPIRequestFactory: BridgeAPIRequestCreating {
     parameters: [String: Any]?,
     userInfo: [String: Any]?
   ) -> BridgeAPIRequestProtocol? {
-    BridgeAPIRequest(
+    _BridgeAPIRequest(
       protocolType: protocolType,
       scheme: URLScheme(rawValue: scheme),
       methodName: methodName,
@@ -28,5 +26,3 @@ final class ShareBridgeAPIRequestFactory: BridgeAPIRequestCreating {
     )
   }
 }
-
-#endif

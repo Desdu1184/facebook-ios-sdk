@@ -10,6 +10,7 @@
 
 #import <Foundation/Foundation.h>
 
+#import <FBSDKCoreKit/FBSDKCoreKit-Swift.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 #import <objc/runtime.h>
 
@@ -19,7 +20,6 @@
 #import "FBSDKGraphRequestConnectionFactoryProtocol.h"
 #import "FBSDKGraphRequestFactoryProtocol.h"
 #import "FBSDKObjectDecoding.h"
-#import "FBSDKSettings.h"
 #import "FBSDKUnarchiverProvider.h"
 
 #define FBSDK_GATEKEEPERS_USER_DEFAULTS_KEY @"com.facebook.sdk:GateKeepers%@"
@@ -97,7 +97,7 @@ static id<FBSDKDataPersisting> _store;
         // load the defaults
         NSString *defaultKey = [NSString stringWithFormat:FBSDK_GATEKEEPERS_USER_DEFAULTS_KEY,
                                 appID];
-        NSData *data = [self.store objectForKey:defaultKey];
+        NSData *data = [self.store fb_objectForKey:defaultKey];
         if ([data isKindOfClass:NSData.class]) {
           id<FBSDKObjectDecoding> unarchiver = [FBSDKUnarchiverProvider createSecureUnarchiverFor:data];
           @try {
@@ -151,7 +151,8 @@ static id<FBSDKDataPersisting> _store;
                                                         parameters:parameters
                                                        tokenString:nil
                                                         HTTPMethod:nil
-                                                             flags:FBSDKGraphRequestFlagSkipClientToken | FBSDKGraphRequestFlagDisableErrorRecovery];
+                                                             flags:FBSDKGraphRequestFlagSkipClientToken | FBSDKGraphRequestFlagDisableErrorRecovery
+                                 useAlternativeDefaultDomainPrefix:NO];
 }
 
 + (void)processLoadRequestResponse:(id)result error:(NSError *)error
@@ -187,13 +188,9 @@ static id<FBSDKDataPersisting> _store;
       NSString *defaultKey = [NSString stringWithFormat:FBSDK_GATEKEEPERS_USER_DEFAULTS_KEY,
                               _settings.appID];
 
-    #if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_11_0
       NSData *data = [NSKeyedArchiver archivedDataWithRootObject:gateKeeper requiringSecureCoding:NO error:NULL];
-    #else
-      NSData *data = [NSKeyedArchiver archivedDataWithRootObject:gateKeeper];
-    #endif
 
-      [self.store setObject:data forKey:defaultKey];
+      [self.store fb_setObject:data forKey:defaultKey];
     }
 
     [self _didProcessGKFromNetwork:error];

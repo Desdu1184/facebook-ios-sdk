@@ -7,6 +7,7 @@
  */
 
 import Foundation
+import Photos
 
 /// A model for video content to be shared.
 @objcMembers
@@ -50,14 +51,18 @@ public final class ShareVideoContent: NSObject {
 
 // MARK: - Type Dependencies
 
-extension ShareVideoContent: DependentType {
-  struct Dependencies {
+extension ShareVideoContent: DependentAsType {
+  struct TypeDependencies {
     var validator: ShareValidating.Type
+    var mediaLibrarySearcher: MediaLibrarySearching
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static var defaultDependencies: Dependencies? = Dependencies(validator: _ShareUtility.self)
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(
+    validator: _ShareUtility.self,
+    mediaLibrarySearcher: PHImageManager.default()
+  )
 }
 
 // MARK: - Sharing Content
@@ -83,7 +88,8 @@ extension ShareVideoContent: SharingContent {
       if bridgeOptions == .videoAsset {
         // Bridge the PHAsset.localIdentifier
         videoParameters["assetIdentifier"] = asset.localIdentifier
-      } else if let url = asset.requestVideoURL(timeoutInMilliseconds: 500) {
+      } else if let mediaLibrarySearcher = Self.mediaLibrarySearcher,
+                let url = try? mediaLibrarySearcher.fb_getVideoURL(for: asset) {
         // Bridge the legacy "assets-library" URL from AVAsset
         videoParameters["assetURL"] = url
       }
@@ -114,7 +120,7 @@ extension ShareVideoContent: SharingContent {
   }
 }
 
-extension ShareVideoContent: SharingValidation {
+extension ShareVideoContent: SharingValidatable {
   @objc(validateWithOptions:error:)
   public func validate(options bridgeOptions: ShareBridgeOptions) throws {
     let validator = try Self.getDependencies().validator

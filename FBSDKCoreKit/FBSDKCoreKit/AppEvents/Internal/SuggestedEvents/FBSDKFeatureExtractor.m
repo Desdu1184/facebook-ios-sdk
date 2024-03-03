@@ -8,12 +8,10 @@
 
 #if !TARGET_OS_TV
 
-#import "FBSDKFeatureExtractor.h"
-
+#import <FBSDKCoreKit/FBSDKCoreKit.h>
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #import "FBSDKModelManager.h"
-#import "FBSDKRulesFromKeyProvider.h"
 #import "FBSDKViewHierarchy.h"
 #import "FBSDKViewHierarchyMacros.h"
 
@@ -389,7 +387,7 @@ void sum(float *val0, float *val1)
   return [self regextMatch:pattern text:matchText];
 }
 
-#if DEBUG && FBTEST
+#if DEBUG
 
 + (void)reset
 {

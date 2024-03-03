@@ -8,9 +8,8 @@
 
 @testable import FBAEMKit
 
+import TestTools
 import XCTest
-
-#if !os(tvOS)
 
 final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
 
@@ -21,7 +20,7 @@ final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
 
   func testIsMatchedEventParametersForAnd() {
     let rule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorAnd,
+      with: .and,
       rules: [SampleAEMSingleEntryRules.cardTypeRule1, SampleAEMSingleEntryRules.valueRule]
     )
     XCTAssertTrue(
@@ -55,7 +54,7 @@ final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
 
   func testIsMatchedEventParametersForOr() {
     let rule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorOr,
+      with: .or,
       rules: [SampleAEMSingleEntryRules.cardTypeRule1, SampleAEMSingleEntryRules.valueRule]
     )
     XCTAssertFalse(
@@ -89,7 +88,7 @@ final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
 
   func testIsMatchedEventParametersForNot() {
     let rule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorNot,
+      with: .not,
       rules: [SampleAEMSingleEntryRules.cardTypeRule1, SampleAEMSingleEntryRules.valueRule]
     )
     XCTAssertTrue(
@@ -123,15 +122,15 @@ final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
 
   func testIsMatchedEventParametersForNestedRules() {
     let andRule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorAnd,
+      with: .and,
       rules: [SampleAEMSingleEntryRules.cardTypeRule2, SampleAEMSingleEntryRules.valueRule]
     )
     let orRule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorOr,
+      with: .or,
       rules: [SampleAEMSingleEntryRules.contentNameRule, SampleAEMSingleEntryRules.contentCategoryRule]
     )
     let nestedRule = AEMAdvertiserMultiEntryRule(
-      with: AEMAdvertiserRuleOperator.FBAEMAdvertiserRuleOperatorAnd,
+      with: .and,
       rules: [andRule, orRule, SampleAEMSingleEntryRules.urlRule]
     )
     XCTAssertTrue(
@@ -176,42 +175,28 @@ final class AEMAdvertiserMultiEntryRuleTests: XCTestCase {
     )
   }
 
-  func testEncoding() throws {
-    let coder = TestCoder()
+  func testEncodingAndDecoding() throws {
     let entryRule = SampleAEMData.validAdvertiserMultiEntryRule
-    entryRule.encode(with: coder)
+    let decodedObject = try CodabilityTesting.encodeAndDecode(entryRule)
 
-    let ruleOperator = coder.encodedObject[Keys.ruleOperator] as? NSNumber
-    XCTAssertEqual(
-      ruleOperator?.intValue,
-      entryRule.operator.rawValue,
-      "Should encode the expected operator with the correct key"
-    )
-    let rules = try XCTUnwrap(coder.encodedObject[Keys.rules] as? [FBAEMAdvertiserRuleMatching])
-    let rule = try XCTUnwrap(rules[0] as? AEMAdvertiserSingleEntryRule)
-    let expectedRule = try XCTUnwrap(entryRule.rules[0] as? AEMAdvertiserSingleEntryRule)
-    XCTAssertEqual(
-      rule,
-      expectedRule,
-      "Should encode the expected rule with the correct key"
-    )
-  }
+    // Test Objects
+    XCTAssertNotIdentical(decodedObject, entryRule, .isCodable)
+    XCTAssertNotEqual(decodedObject, entryRule, .isCodable) // isEqual Method hasn't been implemented
 
-  func testDecoding() {
-    let decoder = TestCoder()
-    _ = AEMAdvertiserMultiEntryRule(coder: decoder)
-
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.ruleOperator] as? String,
-      "decodeIntegerForKey",
-      "Should decode the expected type for the operator key"
+    // Test Properties
+    XCTAssertEqual(decodedObject.operator.rawValue, entryRule.operator.rawValue)
+    let rules = try XCTUnwrap(
+      entryRule.rules as? [AEMAdvertiserSingleEntryRule]
     )
-    XCTAssertEqual(
-      decoder.decodedObject[Keys.rules] as? NSSet,
-      [NSArray.self, AEMAdvertiserMultiEntryRule.self, AEMAdvertiserSingleEntryRule.self],
-      "Should decode the expected type for the rules key"
+    let decodedRules = try XCTUnwrap(
+      decodedObject.rules as? [AEMAdvertiserSingleEntryRule]
     )
+    XCTAssertEqual(decodedRules, rules)
   }
 }
 
-#endif
+// MARK: - Assumptions
+
+extension String {
+  fileprivate static let isCodable = "AEMAdvertiserMultiEntryRule should be encodable and decodable"
+}

@@ -9,8 +9,6 @@
 import FBSDKCoreKit
 import Foundation
 
-#if !os(tvOS)
-
 /**
  A button to send content through Messenger.
 
@@ -53,7 +51,7 @@ public final class FBSendButton: FBButton, SharingButton, FBButtonImpressionLogg
 
   public func configureButton() {
     var title = ""
-    if let internalUtility = try? Self.getDependencies().internalUtility {
+    if let internalUtility = Self.internalUtility {
       title = NSLocalizedString(
         "SendButton.Send",
         tableName: "FacebookSDK",
@@ -91,14 +89,12 @@ public final class FBSendButton: FBButton, SharingButton, FBButtonImpressionLogg
   }
 }
 
-extension FBSendButton: DependentType {
-  struct Dependencies {
+extension FBSendButton: DependentAsType {
+  struct TypeDependencies {
     var internalUtility: InternalUtilityProtocol
   }
 
-  static var configuredDependencies: Dependencies?
+  static var configuredDependencies: TypeDependencies?
 
-  static var defaultDependencies: Dependencies? = Dependencies(internalUtility: InternalUtility.shared)
+  static var defaultDependencies: TypeDependencies? = TypeDependencies(internalUtility: InternalUtility.shared)
 }
-
-#endif
